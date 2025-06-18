@@ -50,10 +50,10 @@ let mcData; // Minecraft game data (blocks, items, etc.) - initialized after bot
 // II. BOT CONFIGURATION
 // =============================================================================
 const BOT_CONFIG = {
-    host: 'localhost',       // Minecraft server address (e.g., 'localhost' or '127.0.0.1' for local)
-    port: 25565,             // Minecraft server port (default is 25565)
+    host: 'fi-01.freezehost.pro',       // Minecraft server address (e.g., 'localhost' or '127.0.0.1' for local)
+    port: 13159,             // Minecraft server port (default is 25565)
     username: 'RL_Agent_' + Math.floor(Math.random() * 10000), // Unique name for each bot instance
-    version: '1.16.5'        // Minecraft version to connect to (must match server)
+    version: '1.21.5'        // Minecraft version to connect to (must match server)
 };
 
 // Create the Mineflayer bot instance
