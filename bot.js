@@ -1,4 +1,5 @@
 const mineflayer = require('mineflayer');
+const util = require('minecraft-server-util');
 
 const serverAddress = 'MQTADA12.aternos.me';
 const serverPort = 55865;
@@ -8,8 +9,21 @@ const botLifetime = 100 * 60 * 1000; // 100 دقيقة
 const baseInterval = 300; // 5 دقائق
 const maxInterval = 360; // 6 دقائق
 
+let serverVersion = 'auto';       // سيُحَدَّد تلقائيًا لاحقًا
 let activeBots = new Array(maxBots).fill(null);
 let scheduleDelays = new Array(maxBots).fill(0);
+
+// استعلام عن إصدار السرفر وتخزينه
+async function detectServerVersion() {
+  try {
+    const status = await util.status(serverAddress, { port: serverPort });
+    console.log(`🛰️ تم اكتشاف إصدار السرفر: ${status.version.name}`);
+    serverVersion = status.version.name;
+  } catch (err) {
+    console.warn('⚠️ فشل اكتشاف إصدار السرفر، سيتم استخدام الإصدار الأحدث تلقائيًا.');
+    serverVersion = 'auto';
+  }
+}
 
 function getIntervalForBot(botNumber) {
   let interval = baseInterval + (botNumber % (maxInterval - baseInterval + 1));
@@ -27,22 +41,23 @@ function delayAllSchedulesOneMinute() {
 function generateRandomName() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let name = 'Bot_';
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 8; i++) {  // أطول قليلًا لضمان التفرد
     name += chars[Math.floor(Math.random() * chars.length)];
   }
   return name;
 }
 
 function createBot(botIndex) {
+  const botName = generateRandomName();
   const bot = mineflayer.createBot({
     host: serverAddress,
     port: serverPort,
-    username: generateRandomName(),
-    version: 'auto' // ← استخدام الإصدار الأحدث تلقائيًا
+    username: botName,
+    version: serverVersion
   });
 
   bot.on('spawn', () => {
-    console.log(`✅ ${bot.username} دخل السيرفر.`);
+    console.log(`✅ ${bot.username} دخل السيرفر بإصدار ${serverVersion}.`);
     activeBots[botIndex] = bot;
 
     setTimeout(() => {
@@ -56,10 +71,11 @@ function createBot(botIndex) {
   bot.on('error', (err) => {
     console.error(`❌ خطأ في ${bot.username}:`, err.code || err.message);
 
+    // في حال أخطاء الاتصال، نؤجل جميع الجداول دقيقة واحدة
     if (
       err.code === 'ECONNREFUSED' ||
       err.code === 'ECONNRESET' ||
-      err.message.includes('read ECONNRESET')
+      (err.message && err.message.includes('read ECONNRESET'))
     ) {
       console.log(`🔁 إعادة محاولة دخول ${bot.username} بعد دقيقة.`);
       delayAllSchedulesOneMinute();
@@ -83,6 +99,10 @@ function scheduleNextBot(botIndex) {
   }, interval);
 }
 
-for (let i = 0; i < maxBots; i++) {
-  scheduleNextBot(i);
-}
+// البداية: اكتشاف الإصدار ثم جدولة البوتات
+(async () => {
+  await detectServerVersion();
+  for (let i = 0; i < maxBots; i++) {
+    scheduleNextBot(i);
+  }
+})();
