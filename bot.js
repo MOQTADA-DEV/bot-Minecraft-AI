@@ -9,64 +9,73 @@ const baseInterval = 300; // 5 دقائق
 const maxInterval = 360; // 6 دقائق
 
 let activeBots = new Array(maxBots).fill(null);
-let scheduleDelays = new Array(maxBots).fill(0); // لكل بوت تأخير زمني إضافي بالدقائق (للأخطاء)
+let scheduleDelays = new Array(maxBots).fill(0);
 
 function getIntervalForBot(botNumber) {
   let interval = baseInterval + (botNumber % (maxInterval - baseInterval + 1));
-  interval += scheduleDelays[botNumber]; // نضيف التأخير في حالة فشل سابق
+  interval += scheduleDelays[botNumber];
   return interval * 1000;
 }
 
 function delayAllSchedulesOneMinute() {
   for (let i = 0; i < maxBots; i++) {
-    scheduleDelays[i] += 1; // تأخير كل بوت دقيقة
+    scheduleDelays[i] += 1;
   }
-  console.log("📛 تم تأخير جميع الجداول دقيقة بسبب فشل اتصال.");
+  console.log("⏳ تأخير الجداول دقيقة بسبب فشل الاتصال.");
+}
+
+function generateRandomName() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let name = 'Bot_';
+  for (let i = 0; i < 5; i++) {
+    name += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return name;
 }
 
 function createBot(botIndex) {
   const bot = mineflayer.createBot({
     host: serverAddress,
     port: serverPort,
-    username: `Bot_${botIndex}_${Date.now()}`,
+    username: generateRandomName(),
+    version: 'auto' // ← استخدام الإصدار الأحدث تلقائيًا
   });
 
   bot.on('spawn', () => {
-    console.log(`✅ بوت ${bot.username} دخل السيرفر.`);
+    console.log(`✅ ${bot.username} دخل السيرفر.`);
     activeBots[botIndex] = bot;
 
     setTimeout(() => {
       bot.quit();
-      console.log(`⏱️ بوت ${bot.username} خرج بعد 100 دقيقة.`);
+      console.log(`⏱️ ${bot.username} خرج بعد 100 دقيقة.`);
       activeBots[botIndex] = null;
-      scheduleNextBot(botIndex); // بعد خروجه، أعد جدولة بوت جديد في نفس المكان
+      scheduleNextBot(botIndex);
     }, botLifetime);
   });
 
   bot.on('error', (err) => {
-    console.error(`❌ خطأ في البوت ${bot.username}:`, err.code || err.message);
+    console.error(`❌ خطأ في ${bot.username}:`, err.code || err.message);
 
     if (
       err.code === 'ECONNREFUSED' ||
       err.code === 'ECONNRESET' ||
       err.message.includes('read ECONNRESET')
     ) {
-      console.log(`🔁 سيتم إعادة محاولة دخول البوت ${bot.username} بعد دقيقة.`);
-      delayAllSchedulesOneMinute(); // نؤخر كل الجدول دقيقة
-      setTimeout(() => scheduleNextBot(botIndex), 60 * 1000); // أعد المحاولة بعد دقيقة
+      console.log(`🔁 إعادة محاولة دخول ${bot.username} بعد دقيقة.`);
+      delayAllSchedulesOneMinute();
+      setTimeout(() => scheduleNextBot(botIndex), 60 * 1000);
     }
   });
 
   bot.on('end', () => {
-    console.log(`🛑 البوت ${bot.username} أنهى الجلسة.`);
+    console.log(`🛑 ${bot.username} انتهت جلسته.`);
     activeBots[botIndex] = null;
   });
 }
 
 function scheduleNextBot(botIndex) {
   const interval = getIntervalForBot(botIndex);
-  console.log(`📆 جدولة بوت رقم ${botIndex} للدخول بعد ${Math.floor(interval / 1000)} ثانية.`);
-
+  console.log(`📆 جدولة بوت ${botIndex} للدخول بعد ${Math.floor(interval / 1000)} ثانية.`);
   setTimeout(() => {
     if (!activeBots[botIndex]) {
       createBot(botIndex);
@@ -74,7 +83,6 @@ function scheduleNextBot(botIndex) {
   }, interval);
 }
 
-// بدء أول 20 بوت (كل بوت في وقته المخصص)
 for (let i = 0; i < maxBots; i++) {
   scheduleNextBot(i);
 }
