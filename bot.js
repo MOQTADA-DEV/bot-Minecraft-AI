@@ -1,265 +1,264 @@
 // =============================================================================
-// Minecraft Advanced RL Bot (Node.js)
-// = =============================================================================
-// This code implements an advanced Reinforcement Learning (RL) agent using
-// TensorFlow.js for a Mineflayer bot in Minecraft Java Edition. It focuses on
-// survival, resource gathering, progression towards advanced goals (Nether,
-// Ender Dragon), and basic inter-bot communication. It also includes features
-// for managing multiple bots and persisting their learned models across restarts.
+// بوت ماين كرافت متقدم باستخدام التعلم المعزز (Node.js)
+// =============================================================================
+// هذا الكود يطبق وكيل تعلم معزز (RL) متقدمًا باستخدام TensorFlow.js
+// لبوت Mineflayer في لعبة Minecraft Java Edition.
+// يركز البوت على البقاء، جمع الموارد، التقدم نحو أهداف كبرى (مثل النذر وتنين النهاية)،
+// والتواصل الأساسي بين البوتات. كما يتضمن ميزات لإدارة عدة بوتات وحفظ
+// نماذج التعلم الخاصة بها بين عمليات إعادة التشغيل.
 //
-// Please Note:
-// - This script must be run in a Node.js environment, NOT in a web browser.
-// - Full-scale implementations of algorithms like MuZero or DreamerV3 are beyond
-//   the scope of a single Node.js script due to their immense computational
-//   and infrastructural requirements. This code provides a robust DQN foundation
-//   for complex in-game behaviors.
-// - The `minecraft-data` library might not have specific data for very new
-//   Minecraft patch versions (e.g., `1.21.5`). It will attempt to load the
-//   closest available data, typically the major version (e.g., `1.21`).
+// ملاحظات هامة:
+// - يجب تشغيل هذا السكريبت في بيئة Node.js، وليس في متصفح الويب.
+// - تطبيقات الخوارزميات واسعة النطاق مثل MuZero أو DreamerV3 تتجاوز بكثير
+//   نطاق سكريبت Node.js واحد بسبب متطلباتها الحاسوبية والبنية التحتية الهائلة.
+//   يوفر هذا الكود أساسًا قويًا لتعلم Q (DQN) لسلوكيات معقدة داخل اللعبة.
+// - مكتبة `minecraft-data` قد لا تحتوي على بيانات دقيقة جدًا لإصدارات Minecraft
+//   الحديثة جدًا (مثل 1.21.5). ستحاول تحميل أقرب البيانات المتاحة، عادةً الإصدار
+//   الرئيسي (مثل 1.21).
 //
 // =============================================================================
-// SETUP AND RUN INSTRUCTIONS:
+// تعليمات الإعداد والتشغيل:
 // =============================================================================
-// 1. Ensure Node.js is installed on your machine (https://nodejs.org/).
-// 2. Create a new, empty folder for your project (e.g., `minecraft_rl_bots`).
-// 3. Open your command-line interface (CMD, PowerShell, Git Bash, or Terminal)
-//    and navigate to your new project folder.
-// 4. Initialize a new Node.js project:
+// 1. تأكد من تثبيت Node.js على جهازك (يمكنك تحميله من: https://nodejs.org/).
+// 2. أنشئ مجلدًا جديدًا فارغًا لمشروعك (مثال: `minecraft_rl_bots`).
+// 3. افتح واجهة سطر الأوامر (CMD أو PowerShell أو Terminal) وانتقل إلى مجلد مشروعك الجديد.
+// 4. قم بتهيئة مشروع Node.js جديد (سيؤدي هذا إلى إنشاء ملف `package.json`):
 //    `npm init -y`
-// 5. Install the necessary libraries:
+// 5. قم بتثبيت المكتبات الضرورية (المدرجة في قسم `dependencies` في `package.json`):
 //    `npm install mineflayer mineflayer-pathfinder @tensorflow/tfjs-node minecraft-data vec3`
-// 6. Save this entire code block into a file named `main.js` (or `bot_manager.js`)
-//    inside your project folder.
-// 7. Make sure you have a Minecraft Java Edition server running at the specified
-//    `SERVER_HOST` and `SERVER_PORT` below.
-// 8. Run the bot manager script:
-//    `node main.js`
-//    The script will now start with a default number of bots, no prompt needed.
+// 6. احفظ كتلة الكود هذه بالكامل في ملف باسم `bot.js` داخل مجلد مشروعك.
+//    (اسم الملف هذا يتوافق مع `main` و `start` في ملف `package.json` الخاص بك).
+// 7. تأكد من تشغيل خادم Minecraft Java Edition على العنوان والمنفذ المحددين أدناه.
+// 8. قم بتشغيل سكريبت مدير البوتات:
+//    `node bot.js`
+//    سيبدأ السكريبت الآن بالعدد الافتراضي من البوتات، ولن يطلب منك أي إدخال.
 //
 // =============================================================================
 
 
 // =============================================================================
-// I. LIBRARY IMPORTS
+// I. استيراد المكتبات (Library Imports)
 // =============================================================================
-const mineflayer = require('mineflayer');
-const pathfinder = require('mineflayer-pathfinder').pathfinder;
-const goals = require('mineflayer-pathfinder').goals;
-const { GoalBlock, GoalNear, GoalXZ } = require('mineflayer-pathfinder').goals;
-const tf = require('@tensorflow/tfjs-node'); // TensorFlow.js for Node.js backend
-const vec3 = require('vec3'); // Vector utilities for 3D coordinates
-const fs = require('fs').promises; // Node.js File System module (Promise-based API)
-// const readline = require('readline'); // No longer needed for user input
+const mineflayer = require('mineflayer'); // المكتبة الأساسية لإنشاء بوتات ماين كرافت
+const pathfinder = require('mineflayer-pathfinder').pathfinder; // لتمكين البوت من البحث عن المسارات والتنقل الذكي
+const goals = require('mineflayer-pathfinder').goals; // أهداف التنقل الخاصة بـ pathfinder
+const { GoalBlock, GoalNear, GoalXZ } = require('mineflayer-pathfinder').goals; // أنواع محددة من الأهداف
+const tf = require('@tensorflow/tfjs-node'); // TensorFlow.js لواجهة برمجة تطبيقات Node.js (للتعلّم الآلي)
+const vec3 = require('vec3'); // لأداء عمليات المتجهات ثلاثية الأبعاد (المواقع، الاتجاهات)
+const fs = require('fs').promises; // وحدة نظام الملفات في Node.js (واجهة برمجة تطبيقات تستند إلى الوعود)
+// لم تعد هناك حاجة لـ `readline` لأن العدد الافتراضي للبوتات يتم تعيينه مباشرة في الكود.
 
-
-let mcData; // Minecraft game data (blocks, items, etc.) - initialized dynamically
-
-
-// =============================================================================
-// II. GLOBAL BOT CONFIGURATION & CONSTANTS
-// =============================================================================
-const SERVER_HOST = 'MQTADA12.aternos.me'; // Minecraft server address - UPDATED
-const SERVER_PORT = 55865;             // Minecraft server port - UPDATED
-const MINECRAFT_VERSION = '1.21.5';    // Minecraft version to connect to
-const BOTS_CONFIG_FILE = './bots_config.json'; // File for saving/loading bot profiles
-const MODELS_DIR = './bot_models';     // Directory where individual bot models are saved
-
-// Default number of bots to run (can be changed directly in the code)
-const DEFAULT_BOT_COUNT = 10; // UPDATED: Set a default number of bots
+let mcData; // سيتم تهيئة بيانات لعبة Minecraft (الكتل، العناصر، إلخ) ديناميكيًا بعد اتصال البوت
 
 
 // =============================================================================
-// III. DEFINING BOT ACTIONS
+// II. التكوين العام للبوتات والثوابت (Global Bot Configuration & Constants)
 // =============================================================================
-// This object maps descriptive action names to unique numeric IDs.
-// Each ID corresponds to an output neuron in the Q-network.
+const SERVER_HOST = 'MQTADA12.aternos.me'; // عنوان خادم Minecraft
+const SERVER_PORT = 55865;             // منفذ خادم Minecraft
+const MINECRAFT_VERSION = '1.21.5';    // إصدار Minecraft للاتصال به
+
+// مسار الملف لحفظ/تحميل ملفات تعريف البوتات (أسماء المستخدمين) لضمان الاستمرارية
+const BOTS_CONFIG_FILE = './bots_config.json';
+// دليل حفظ نماذج التعلم (الشبكات العصبية) لكل بوت على حدة
+const MODELS_DIR = './bot_models';
+
+// العدد الافتراضي للبوتات التي سيتم تشغيلها عند بدء السكريبت. يمكنك تغيير هذا الرقم مباشرة هنا.
+const DEFAULT_BOT_COUNT = 10;
+
+
+// =============================================================================
+// III. تعريف إجراءات البوت (Defining Bot Actions)
+// =============================================================================
+// هذا الكائن يربط أسماء الإجراءات الوصفية بمعرفات رقمية فريدة.
+// يمثل كل معرف رقمي عصبون إخراج في الشبكة العصبية لوكيل Q-learning.
 const ACTIONS = {
-    WALK_RANDOM: 0,
-    ATTACK_NEAREST_HOSTILE: 1,
-    FLEE_FROM_HOSTILE: 2,
-    BUILD_BASIC_SHELTER: 3,
-    DIG_WOOD: 4,
-    CRAFT_WOODEN_PICKAXE: 5,
-    COLLECT_DROPPED_ITEMS: 6,
-    SLEEP: 7,
-    IDLE: 8,
-    MINE_STONE: 9,
-    CRAFT_STONE_PICKAXE: 10,
-    MINE_COAL: 11,
-    MINE_IRON: 12,
-    CRAFT_FURNACE: 13,
-    SMELT_IRON: 14,
-    CRAFT_IRON_PICKAXE: 15,
-    MINE_DIAMONDS: 16,
-    CRAFT_NETHER_PORTAL: 17,
-    GO_TO_NETHER: 18,
-    KILL_DRAGON: 19,
-    COMMUNICATE_REQUEST_WOOD: 20,
-    COMMUNICATE_OFFER_WOOD: 21,
-    COMMUNICATE_ENEMY_WARNING: 22,
+    WALK_RANDOM: 0,                   // المشي عشوائيًا إلى موقع قريب
+    ATTACK_NEAREST_HOSTILE: 1,        // مهاجمة أقرب كائن معادٍ
+    FLEE_FROM_HOSTILE: 2,             // الهروب من أقرب كائن معادٍ
+    BUILD_BASIC_SHELTER: 3,           // بناء ملجأ أساسي من التراب
+    DIG_WOOD: 4,                      // تعدين أقرب جذع شجر
+    CRAFT_WOODEN_PICKAXE: 5,          // صناعة فأس خشبي
+    COLLECT_DROPPED_ITEMS: 6,         // جمع العناصر المتساقطة القريبة
+    SLEEP: 7,                         // محاولة النوم في سرير (إذا كان الليل وسرير قريب)
+    IDLE: 8,                          // عدم فعل أي شيء لفترة قصيرة
+    MINE_STONE: 9,                    // تعدين حجر الكوبلستون (cobblestone)
+    CRAFT_STONE_PICKAXE: 10,          // صناعة فأس حجري
+    MINE_COAL: 11,                    // تعدين فحم الخام
+    MINE_IRON: 12,                    // تعدين حديد الخام
+    CRAFT_FURNACE: 13,                // صناعة فرن
+    SMELT_IRON: 14,                   // صهر خام الحديد إلى سبائك
+    CRAFT_IRON_PICKAXE: 15,           // صناعة فأس حديدي
+    MINE_DIAMONDS: 16,                // محاولة تعدين الألماس (تتطلب فأس حديدي/ألماس)
+    CRAFT_NETHER_PORTAL: 17,          // محاولة صناعة بوابة النذر (مفهومي)
+    GO_TO_NETHER: 18,                 // محاولة دخول بُعد النذر (مفهومي)
+    KILL_DRAGON: 19,                  // محاولة قتل تنين النهاية (مفهومي ومعقد للغاية)
+    COMMUNICATE_REQUEST_WOOD: 20,     // محادثة: طلب الخشب من اللاعبين/البوتات الأخرى
+    COMMUNICATE_OFFER_WOOD: 21,       // محادثة: عرض الخشب على اللاعبين/البوتات الأخرى
+    COMMUNICATE_ENEMY_WARNING: 22,    // محادثة: التحذير من الكائنات المعادية القريبة
 };
-const ACTION_NAMES = Object.keys(ACTIONS); // Used for logging and readability
+const ACTION_NAMES = Object.keys(ACTIONS); // مصفوفة بأسماء الإجراءات لتسهيل التسجيل والقراءة
 
 
 // =============================================================================
-// IV. REINFORCEMENT LEARNING AGENT (Q-AGENT) CLASS
+// IV. فئة وكيل التعلّم المعزز (Q-Agent Class)
 // =============================================================================
 /**
- * Implements a Deep Q-Network (DQN) agent for Reinforcement Learning.
- * This agent uses TensorFlow.js to build and train a neural network
- * that approximates the Q-value function. Each bot will have its own QAgent.
+ * تطبيق وكيل شبكة Q-العميقة (DQN) للتعلم المعزز.
+ * يستخدم هذا الوكيل TensorFlow.js لبناء وتدريب شبكة عصبية تقارب دالة قيمة Q.
+ * كل بوت سيكون له وكيل Q-Agent الخاص به، مما يسمح بالتعلم المستقل.
  */
 class QAgent {
     /**
-     * @param {number} inputDim - Dimension of the state input vector.
-     * @param {number} outputDim - Dimension of the action output vector (number of possible actions).
-     * @param {string} modelId - A unique identifier for this agent's model (e.g., bot username).
-     * @param {object} [params] - Optional hyperparameters for the agent.
-     * @param {number} [params.learningRate=0.001] - Rate at which the model learns.
-     * @param {number} [params.discountFactor=0.99] - Gamma, discounts future rewards.
-     * @param {number} [params.epsilon=1.0] - Initial exploration rate (for epsilon-greedy policy).
-     * @param {number} [params.epsilonDecay=0.9995] - Rate at which epsilon decays over time.
-     * @param {number} [params.minEpsilon=0.005] - Minimum epsilon value.
-     * @param {number} [params.replayBufferSize=200000] - Maximum size of the experience replay buffer.
-     * @param {number} [params.batchSize=64] - Number of experiences to sample for each training step.
-     * @param {number} [params.targetUpdateFreq=200] - Frequency (in training steps) to update the target network.
+     * مُنشئ فئة QAgent.
+     * @param {number} inputDim - أبعاد متجه الحالة المدخل (عدد الميزات التي تصف البيئة).
+     * @param {number} outputDim - أبعاد متجه الإجراءات المخرجة (عدد الإجراءات الممكنة).
+     * @param {string} modelId - معرف فريد لنموذج هذا الوكيل (عادةً اسم مستخدم البوت).
+     * @param {object} [params={}] - معلمات اختيارية لوكيل التعلم المعزز.
+     * @param {number} [params.learningRate=0.001] - معدل التعلم (معدل تعديل الأوزان أثناء التدريب).
+     * @param {number} [params.discountFactor=0.99] - عامل الخصم (جاما)، يخصم المكافآت المستقبلية.
+     * @param {number} [params.epsilon=1.0] - معدل الاستكشاف الأولي (لتطبيق سياسة إبسيلون-جشعة).
+     * @param {number} [params.epsilonDecay=0.9995] - معدل اضمحلال إبسيلون بمرور الوقت (لتقليل الاستكشاف تدريجيًا).
+     * @param {number} [params.minEpsilon=0.005] - الحد الأدنى لقيمة إبسيلون.
+     * @param {number} [params.replayBufferSize=200000] - الحد الأقصى لحجم ذاكرة إعادة التجربة.
+     * @param {number} [params.batchSize=64] - حجم الدفعة (batch) المستخدمة في كل خطوة تدريب.
+     * @param {number} [params.targetUpdateFreq=200] - التكرار (بعدد خطوات التدريب) لتحديث الشبكة الهدف.
      */
     constructor(inputDim, outputDim, modelId, params = {}) {
         this.inputDim = inputDim;
         this.outputDim = outputDim;
-        this.modelId = modelId; // Used for unique model save path
+        this.modelId = modelId; // يُستخدم لتحديد مسار حفظ فريد للنموذج
 
-        // Hyperparameters with defaults
-        this.learningRate = params.learningRate !== undefined ? params.learningRate : 0.001;
-        this.discountFactor = params.discountFactor !== undefined ? params.discountFactor : 0.99;
-        this.epsilon = params.epsilon !== undefined ? params.epsilon : 1.0;
-        this.epsilonDecay = params.epsilonDecay !== undefined ? params.epsilonDecay : 0.9995;
-        this.minEpsilon = params.minEpsilon !== undefined ? params.minEpsilon : 0.005;
+        // المعلمات الفائقة (Hyperparameters) مع القيم الافتراضية
+        this.learningRate = params.learningRate ?? 0.001;
+        this.discountFactor = params.discountFactor ?? 0.99;
+        this.epsilon = params.epsilon ?? 1.0;
+        this.epsilonDecay = params.epsilonDecay ?? 0.9995;
+        this.minEpsilon = params.minEpsilon ?? 0.005;
 
-        this.replayBuffer = [];
-        this.replayBufferSize = params.replayBufferSize !== undefined ? params.replayBufferSize : 200000;
-        this.batchSize = params.batchSize !== undefined ? params.batchSize : 64;
+        this.replayBuffer = []; // ذاكرة إعادة التجربة لتخزين الخبرات
+        this.replayBufferSize = params.replayBufferSize ?? 200000; // حجم الذاكرة
+        this.batchSize = params.batchSize ?? 64; // حجم الدفعة للتدريب
 
-        this.targetUpdateFreq = params.targetUpdateFreq !== undefined ? params.targetUpdateFreq : 200;
-        this.updateCount = 0; // Tracks training steps for target network updates
+        this.targetUpdateFreq = params.targetUpdateFreq ?? 200; // تكرار تحديث الشبكة الهدف
+        this.updateCount = 0; // عداد لتتبع خطوات التدريب
 
-        // Define unique path for this bot's model
+        // تحديد مسار الحفظ الفريد لنموذج هذا البوت
         this.modelSavePath = `${MODELS_DIR}/${this.modelId}`;
 
-        // Build main Q-network and target Q-network
+        // بناء الشبكة العصبية الرئيسية (Q-Network) والشبكة الهدف (Target Q-Network)
         this.model = this._buildQNetwork();
         this.targetModel = this._buildQNetwork();
-        this.targetModel.setWeights(this.model.getWeights()); // Synchronize weights initially
+        // مزامنة أوزان الشبكة الهدف مع الشبكة الرئيسية في البداية
+        this.targetModel.setWeights(this.model.getWeights());
 
-        // Attempt to load previously saved model weights for continuous learning
+        // محاولة تحميل أوزان النموذج المحفوظة مسبقًا للتعلم المستمر
         this._loadModel();
     }
 
     /**
-     * Builds the Deep Q-Network (DQN) model using TensorFlow.js sequential API.
-     * This is a feedforward neural network. For advanced Recurrent RL (like LSTMs),
-     * this method would be modified to include `tf.layers.lstm` or `tf.layers.gru`
-     * layers, and the input shape would need to be adapted for sequences of states.
-     * @returns {tf.LayersModel} The compiled TensorFlow.js model.
+     * تبني نموذج شبكة Q-العميقة (DQN) باستخدام واجهة TensorFlow.js التسلسلية.
+     * هذه شبكة عصبية تغذية أمامية بسيطة. لتطبيق التعلم المعزز المتكرر (Recurrent RL)،
+     * يجب تعديل هذه الدالة لتضمين طبقات مثل `tf.layers.lstm` أو `tf.layers.gru`
+     * وتكييف شكل المدخلات لاستقبال تسلسلات من الحالات بدلاً من حالة واحدة.
+     * @returns {tf.LayersModel} نموذج TensorFlow.js المترجم.
      * @private
      */
     _buildQNetwork() {
         const model = tf.sequential();
-        // Input Layer: Receives the state vector
+        // طبقة الإدخال: تستقبل متجه الحالة (عدد الميزات)
         model.add(tf.layers.dense({ units: 256, activation: 'relu', inputShape: [this.inputDim] }));
-        // Hidden Layers: Process the input features
+        // الطبقات المخفية: تقوم بمعالجة ميزات الإدخال
         model.add(tf.layers.dense({ units: 256, activation: 'relu' }));
-        // Output Layer: Predicts Q-values for each possible action
-        model.add(tf.layers.dense({ units: this.outputDim, activation: 'linear' })); // Linear activation for Q-values
+        // طبقة الإخراج: تتنبأ بقيم Q لكل إجراء ممكن
+        model.add(tf.layers.dense({ units: this.outputDim, activation: 'linear' })); // تنشيط خطي لقيم Q
 
-        // Compile the model with an optimizer and a loss function
+        // ترجمة (تجميع) النموذج باستخدام محسّن (optimizer) ودالة خسارة (loss function)
         model.compile({
-            optimizer: tf.train.adam(this.learningRate),
-            loss: 'meanSquaredError' // Mean Squared Error is a common loss for Q-learning
+            optimizer: tf.train.adam(this.learningRate), // محسّن Adam شائع وفعال
+            loss: 'meanSquaredError' // MSE (متوسط الخطأ التربيعي) هي دالة خسارة شائعة لـ Q-learning
         });
         return model;
     }
 
     /**
-     * Attempts to load pre-trained model weights from the local file system.
-     * This allows the bot to continue learning from previous sessions.
+     * تحاول تحميل أوزان النموذج المدربة مسبقًا من نظام الملفات المحلي.
+     * يتيح ذلك للبوت مواصلة التعلم من الجلسات السابقة.
      * @private
      */
     async _loadModel() {
         try {
-            // Check if the model directory exists for this specific bot
+            // التحقق مما إذا كان دليل النموذج موجودًا لهذا البوت المحدد
             await fs.access(this.modelSavePath);
-            // Load model weights from the specified path
+            // تحميل أوزان النموذج من المسار المحدد
             this.model = await tf.loadLayersModel(`file://${this.modelSavePath}/model.json`);
-            // Synchronize the target network with the loaded main model
+            // مزامنة الشبكة الهدف مع النموذج الرئيسي الذي تم تحميله
             this.targetModel.setWeights(this.model.getWeights());
-            console.log(`[RL_AGENT-${this.modelId}] Model loaded successfully from ${this.modelSavePath}.`);
-            // When loading a trained model, it's common to start with a lower epsilon
+            console.log(`[RL_AGENT-${this.modelId}] تم تحميل النموذج بنجاح من ${this.modelSavePath}.`);
+            // عند تحميل نموذج مدرب، من الشائع البدء بقيمة إبسيلون أقل
             this.epsilon = this.minEpsilon;
         } catch (e) {
-            // If the directory or model.json doesn't exist, it's a new model
+            // إذا لم يكن الدليل أو ملف model.json موجودًا، فهذا أمر طبيعي لنموذج جديد
             if (e.code === 'ENOENT') {
-                console.log(`[RL_AGENT-${this.modelId}] No existing model found at ${this.modelSavePath}. Starting with a new model.`);
+                console.log(`[RL_AGENT-${this.modelId}] لم يتم العثور على نموذج موجود في ${this.modelSavePath}. بدء نموذج جديد.`);
             } else {
-                // Log other types of errors during model loading
-                console.error(`[RL_AGENT-${this.modelId}] Error loading model from ${this.modelSavePath}:`, e);
+                // تسجيل أنواع أخرى من الأخطاء أثناء تحميل النموذج
+                console.error(`[RL_AGENT-${this.modelId}] خطأ أثناء تحميل النموذج من ${this.modelSavePath}:`, e);
             }
         }
     }
 
     /**
-     * Saves the current model weights to the local file system.
-     * This should be called periodically or when the bot disconnects,
-     * ensuring learning progress is not lost.
+     * يحفظ أوزان النموذج الحالي في نظام الملفات المحلي.
+     * يجب استدعاء هذه الدالة بشكل دوري أو عند قطع اتصال البوت لضمان عدم فقدان التقدم.
      */
     async saveModel() {
         try {
-            // Create the directory for this bot's model if it doesn't exist
+            // إنشاء الدليل لنموذج هذا البوت إذا لم يكن موجودًا
             await fs.mkdir(this.modelSavePath, { recursive: true });
-            // Save the main model to the specified path
+            // حفظ النموذج الرئيسي في المسار المحدد
             await this.model.save(`file://${this.modelSavePath}`);
-            console.log(`[RL_AGENT-${this.modelId}] Model saved successfully to ${this.modelSavePath}.`);
+            console.log(`[RL_AGENT-${this.modelId}] تم حفظ النموذج بنجاح في ${this.modelSavePath}.`);
         } catch (e) {
-            console.error(`[RL_AGENT-${this.modelId}] Failed to save model to ${this.modelSavePath}:`, e);
+            console.error(`[RL_AGENT-${this.modelId}] فشل في حفظ النموذج في ${this.modelSavePath}:`, e);
         }
     }
 
     /**
-     * Stores a single experience (state, action, reward, next state, done) in the
-     * experience replay buffer. This buffer is crucial for batch training and
-     * stabilizing the learning process in DQN.
-     * @param {Array<number>} state - The current observed state of the environment.
-     * @param {number} action - The action taken by the agent.
-     * @param {number} reward - The immediate reward received from the environment.
-     * @param {Array<number>} nextState - The state observed after taking the action.
-     * @param {boolean} done - A boolean indicating if the episode has terminated.
+     * يخزن تجربة واحدة (حالة، إجراء، مكافأة، حالة تالية، انتهاء) في ذاكرة إعادة التجربة.
+     * هذه الذاكرة حاسمة للتدريب بالدفعات (batch training) وتثبيت عملية التعلم في DQN.
+     * @param {Array<number>} state - الحالة الحالية الملاحظة للبيئة.
+     * @param {number} action - الإجراء الذي اتخذه الوكيل.
+     * @param {number} reward - المكافأة الفورية المستلمة من البيئة.
+     * @param {Array<number>} nextState - الحالة الملاحظة بعد اتخاذ الإجراء.
+     * @param {boolean} done - قيمة منطقية تشير إلى ما إذا كانت الحلقة قد انتهت.
      */
     remember(state, action, reward, nextState, done) {
         this.replayBuffer.push([state, action, reward, nextState, done]);
-        // If the buffer exceeds its maximum size, remove the oldest experience
+        // إذا تجاوزت الذاكرة حجمها الأقصى، يتم إزالة أقدم تجربة
         if (this.replayBuffer.length > this.replayBufferSize) {
             this.replayBuffer.shift();
         }
     }
 
     /**
-     * Selects an action based on the epsilon-greedy policy.
-     * With probability `epsilon`, a random action is chosen (exploration).
-     * Otherwise, the action with the highest predicted Q-value is chosen (exploitation).
-     * @param {Array<number>} state - The current observed state.
-     * @returns {number} The ID of the chosen action.
+     * يختار إجراءً بناءً على سياسة إبسيلون-جشعة (epsilon-greedy policy).
+     * باحتمالية `epsilon`، يتم اختيار إجراء عشوائي (استكشاف).
+     * وإلا، يتم اختيار الإجراء ذي أعلى قيمة Q متنبأ بها (استغلال).
+     * @param {Array<number>} state - الحالة الحالية الملاحظة.
+     * @returns {number} معرف الإجراء المختار.
      */
     chooseAction(state) {
         if (Math.random() < this.epsilon) {
-            // Exploration: Choose a random action from all possible actions
+            // استكشاف: اختيار إجراء عشوائي من جميع الإجراءات الممكنة
             return Math.floor(Math.random() * this.outputDim);
         } else {
-            // Exploitation: Predict Q-values for all actions in the current state
+            // استغلال: التنبؤ بقيم Q لجميع الإجراءات في الحالة الحالية
             const stateTensor = tf.tensor2d([state]);
             const qValues = this.model.predict(stateTensor);
-            // Get the action ID with the maximum Q-value
+            // الحصول على معرف الإجراء ذي أعلى قيمة Q
             const action = qValues.argMax(-1).dataSync()[0];
-            // Clean up TensorFlow tensors from memory to prevent memory leaks
+            // تنظيف موترات TensorFlow من الذاكرة لمنع تسرب الذاكرة
             tf.dispose(stateTensor);
             tf.dispose(qValues);
             return action;
@@ -267,112 +266,124 @@ class QAgent {
     }
 
     /**
-     * Trains the main Q-network using a mini-batch of experiences sampled
-     * from the replay buffer. This implements the core of the DQN algorithm,
-     * calculating target Q-values using the Bellman equation and updating the network.
+     * يدرب شبكة Q الرئيسية باستخدام دفعة مصغرة من التجارب المأخوذة
+     * من ذاكرة إعادة التجربة. يطبق هذا جوهر خوارزمية DQN،
+     * بحساب قيم Q المستهدفة باستخدام معادلة بيلمان وتحديث الشبكة.
      */
     async trainModel() {
-        // Only train if there are enough experiences in the buffer to form a batch
+        // التدريب فقط إذا كانت هناك تجارب كافية في الذاكرة لتشكيل دفعة
         if (this.replayBuffer.length < this.batchSize) {
             return;
         }
 
-        // Periodically update the target Q-network's weights to stabilize training
+        // تحديث أوزان شبكة Q الهدف بشكل دوري لتثبيت التدريب
         this.updateCount++;
         if (this.updateCount % this.targetUpdateFreq === 0) {
             this.targetModel.setWeights(this.model.getWeights());
-            console.log(`[RL_AGENT-${this.modelId}] Target network weights updated.`);
+            console.log(`[RL_AGENT-${this.modelId}] تم تحديث أوزان الشبكة الهدف.`);
         }
 
-        // Sample a random mini-batch of experiences from the replay buffer
+        // أخذ عينة عشوائية من دفعة مصغرة من التجارب من ذاكرة إعادة التجربة
         const batch = this.replayBuffer
-            .sort(() => 0.5 - Math.random()) // Shuffle the buffer
-            .slice(0, this.batchSize);       // Select the batch size from the shuffled experiences
+            .sort(() => 0.5 - Math.random()) // خلط الذاكرة عشوائياً
+            .slice(0, this.batchSize);       // اختيار حجم الدفعة من التجارب المخلوطة
 
-        // Extract components of the experiences
+        // استخلاص مكونات التجارب
         const states = batch.map(e => e[0]);
         const actions = batch.map(e => e[1]);
         const rewards = batch.map(e => e[2]);
         const nextStates = batch.map(e => e[3]);
         const dones = batch.map(e => e[4]);
 
-        // Use tf.tidy to automatically dispose of intermediate tensors, preventing memory leaks
+        // استخدام tf.tidy للتخلص تلقائيًا من الموترات المؤقتة، مما يمنع تسرب الذاكرة
         await tf.tidy(async () => {
             const statesTensor = tf.tensor2d(states);
             const nextStatesTensor = tf.tensor2d(nextStates);
 
-            // Predict Q-values for current states using the main network
+            // التنبؤ بقيم Q للحالات الحالية باستخدام الشبكة الرئيسية
             const currentQValues = this.model.predict(statesTensor);
-            // Predict Q-values for next states using the target network (for more stable targets)
+            // التنبؤ بقيم Q للحالات التالية باستخدام الشبكة الهدف (لأهداف أكثر استقرارًا)
             const nextQValuesTarget = this.targetModel.predict(nextStatesTensor);
 
-            // Convert current Q-values to a mutable JavaScript array for direct modification
+            // تحويل قيم Q الحالية إلى مصفوفة JavaScript قابلة للتعديل
             const targetQValues = currentQValues.arraySync();
 
-            // Calculate the target Q-value for each experience in the batch
+            // حساب قيمة Q المستهدفة لكل تجربة في الدفعة
             for (let i = 0; i < this.batchSize; i++) {
                 const isDone = dones[i];
                 const reward = rewards[i];
                 const action = actions[i];
 
                 if (isDone) {
-                    // If the episode terminated, the target Q-value for the taken action is just the immediate reward
+                    // إذا انتهت الحلقة، فإن قيمة Q المستهدفة للإجراء المتخذ هي المكافأة الفورية فقط
                     targetQValues[i][action] = reward;
                 } else {
-                    // Otherwise, calculate using the Bellman equation: R + gamma * max(Q_target(s', a'))
+                    // وإلا، يتم الحساب باستخدام معادلة بيلمان: R + gamma * max(Q_target(s', a'))
                     const maxNextQ = tf.max(nextQValuesTarget.slice([i, 0], [1, this.outputDim])).dataSync()[0];
                     targetQValues[i][action] = reward + this.discountFactor * maxNextQ;
                 }
             }
 
-            // Convert the calculated target Q-values back to a TensorFlow tensor
+            // تحويل قيم Q المستهدفة المحسوبة مرة أخرى إلى موتر TensorFlow
             const targetsTensor = tf.tensor2d(targetQValues);
 
-            // Train the main Q-network to predict these target Q-values.
-            // This adjusts the network's weights to reduce the difference between predicted and target Q-values.
+            // تدريب شبكة Q الرئيسية للتنبؤ بقيم Q المستهدفة هذه.
+            // هذا يضبط أوزان الشبكة لتقليل الفرق بين قيم Q المتنبأ بها وقيم Q المستهدفة.
             await this.model.fit(statesTensor, targetsTensor, {
-                epochs: 1, // Train for a single epoch per batch
-                verbose: 0 // Suppress training output to keep console clean
+                epochs: 1, // التدريب لـ epoch واحد لكل دفعة
+                verbose: 0 // منع إخراج التدريب للحفاظ على نظافة وحدة التحكم
             });
         });
 
-        // Decay epsilon over time to reduce exploration and favor exploitation as agent learns
+        // اضمحلال إبسيلون بمرور الوقت لتقليل الاستكشاف وتفضيل الاستغلال مع تعلم الوكيل
         this.epsilon = Math.max(this.minEpsilon, this.epsilon * this.epsilonDecay);
     }
 }
 
 
 // =============================================================================
-// V. BOT AGENT CLASS (Continuation from earlier thought block)
+// V. تهيئة وكيل Q-Agent (Q-Agent Initialization)
+// =============================================================================
+// تعريف أبعاد متجه الحالة المدخل.
+// يجب أن يتطابق هذا مع عدد القيم التي تعيدها الدالة `_getBotState()`.
+const INPUT_NODES = 25;
+// تعريف أبعاد متجه الإجراءات المخرجة (عدد الإجراءات الممكنة).
+// يجب أن يتطابق هذا مع عدد الإجراءات المعرفة في الكائن `ACTIONS`.
+const OUTPUT_NODES = Object.keys(ACTIONS).length;
+
+
+// =============================================================================
+// VI. فئة وكيل البوت (BotAgent Class)
 // =============================================================================
 /**
- * Manages a single Mineflayer bot instance along with its dedicated Q-Agent.
- * Handles bot's lifecycle, state observation, action execution, and RL training.
+ * تدير مثيلاً واحدًا من بوت Mineflayer جنبًا إلى جنب مع وكيل Q-Agent المخصص له.
+ * تتعامل مع دورة حياة البوت، مراقبة الحالة، تنفيذ الإجراءات، وتدريب التعلم المعزز.
  */
 class BotAgent {
     /**
-     * @param {string} username - The unique username for this bot.
-     * @param {object} [agentParams={}] - Optional hyperparameters for the QAgent.
+     * مُنشئ فئة BotAgent.
+     * @param {string} username - اسم المستخدم الفريد لهذا البوت.
+     * @param {object} [agentParams={}] - معلمات اختيارية لوكيل QAgent الخاص بهذا البوت.
      */
     constructor(username, agentParams = {}) {
         this.username = username;
-        this.bot = null; // Mineflayer bot instance
-        this.qAgent = null; // QAgent instance for this bot
+        this.bot = null; // مثيل بوت Mineflayer
+        this.qAgent = null; // مثيل QAgent لهذا البوت
 
-        // RL specific variables for the current episode
+        // متغيرات خاصة بالتعلم المعزز للحلقة الحالية (episode)
         this.lastState = null;
         this.lastAction = null;
         this.currentEpisodeReward = 0;
         this.consecutiveIdleActions = 0;
-        this.lastDiedTime = 0; // Timestamp of last death for 'recentlyDied' state
+        this.lastDiedTime = 0; // طابع زمني لآخر موت للبوت (لميزة "recentlyDied" في الحالة)
 
-        // Initialize QAgent for this bot
-        // INPUT_NODES and OUTPUT_NODES are global constants for QAgent dimensions
+        // تهيئة وكيل QAgent لهذا البوت.
+        // INPUT_NODES و OUTPUT_NODES هما ثوابت عالمية لأبعاد QAgent.
         this.qAgent = new QAgent(INPUT_NODES, OUTPUT_NODES, this.username, agentParams);
     }
 
     /**
-     * Connects the bot to the Minecraft server and sets up event listeners.
+     * يقوم بتوصيل البوت بخادم Minecraft ويُعيّن مستمعي الأحداث.
      */
     connect() {
         this.bot = mineflayer.createBot({
@@ -382,27 +393,27 @@ class BotAgent {
             version: MINECRAFT_VERSION
         });
 
-        // Load the pathfinder plugin for intelligent movement for this bot
+        // تحميل إضافة pathfinder للتنقل الذكي لهذا البوت
         this.bot.loadPlugin(pathfinder);
 
-        // --- Register Bot Event Handlers ---
-        this.bot.on('spawn', this._onSpawn.bind(this));      // When bot successfully connects and spawns
-        this.bot.on('end', this._onEnd.bind(this));          // When bot disconnects
-        this.bot.on('error', this._onError.bind(this));      // When an error occurs
-        this.bot.on('chat', this._onChat.bind(this));        // When a chat message is received
+        // --- تسجيل مستمعي أحداث البوت ---
+        this.bot.on('spawn', this._onSpawn.bind(this));      // عند اتصال البوت و ظهوره في العالم بنجاح
+        this.bot.on('end', this._onEnd.bind(this));          // عند قطع اتصال البوت
+        this.bot.on('error', this._onError.bind(this));      // عند حدوث خطأ
+        this.bot.on('chat', this._onChat.bind(this));        // عند استقبال رسالة دردشة
 
-        // Initialize mcData (Minecraft game data) globally if it hasn't been done yet.
-        // This ensures mcData is available for all bots.
+        // تهيئة mcData (بيانات لعبة Minecraft) بشكل عام إذا لم يتم ذلك بعد.
+        // هذا يضمن توفر mcData لجميع البوتات.
         if (!mcData) {
             this.bot.once('spawn', () => {
                 mcData = require('minecraft-data')(this.bot.version);
-                console.log(`[BOT-${this.username}][INIT] Minecraft data globally initialized for version: ${this.bot.version}`);
+                console.log(`[BOT-${this.username}][INFO] تم تهيئة بيانات ماينكرافت عالميًا للإصدار: ${this.bot.version}`);
             });
         }
     }
 
     /**
-     * Disconnects the bot from the server.
+     * يفصل البوت عن الخادم.
      */
     disconnect() {
         if (this.bot && this.bot.client.socket.readyState === 'open') {
@@ -411,86 +422,86 @@ class BotAgent {
     }
 
     /**
-     * Handles the bot's spawn event. Resets episode variables and starts the thinking loop.
+     * يتعامل مع حدث ظهور البوت. يعيد تعيين متغيرات الحلقة ويبدأ حلقة التفكير.
      * @private
      */
     async _onSpawn() {
-        console.log(`[BOT-${this.username}] Spawned into the world!`);
-        this.bot.chat(`مرحباً! أنا ${this.username}, بوت ذكاء اصطناعي أتعلم البقاء والتطور.`); // Arabic greeting
+        console.log(`[BOT-${this.username}] ظهر في العالم!`);
+        this.bot.chat(`مرحباً! أنا ${this.username}, بوت ذكاء اصطناعي أتعلم البقاء والتطور.`);
 
-        // Reset episode-specific variables for a new learning episode
+        // إعادة تعيين المتغيرات الخاصة بالحلقة لتعلم حلقة جديدة
         this.lastState = null;
         this.lastAction = null;
         this.currentEpisodeReward = 0;
         this.consecutiveIdleActions = 0;
 
-        // Clear any existing thinking interval to prevent multiple loops
+        // مسح أي فاصل زمني (interval) للتفكير موجود لمنع حلقات متعددة
         if (this.thinkInterval) {
             clearInterval(this.thinkInterval);
         }
-        // Start the bot's main thinking loop, calling _think() every 1 second
+        // بدء حلقة التفكير الرئيسية للبوت، باستدعاء _think() كل 1 ثانية
         this.thinkInterval = setInterval(this._think.bind(this), 1000);
-        console.log(`[BOT-${this.username}] Thinking cycle started.`);
+        console.log(`[BOT-${this.username}][INFO] بدأت دورة التفكير للبوت.`);
     }
 
     /**
-     * Handles the bot's disconnection event. Clears the thinking loop and saves the model.
-     * @param {string} reason - The reason for disconnection.
+     * يتعامل مع حدث قطع اتصال البوت. يمسح حلقة التفكير ويحفظ النموذج.
+     * @param {string} reason - سبب قطع الاتصال.
      * @private
      */
     async _onEnd(reason) {
-        console.log(`[BOT-${this.username}] Disconnected: ${reason}`);
+        console.log(`[BOT-${this.username}] قطع الاتصال: ${reason}`);
         if (this.thinkInterval) {
-            clearInterval(this.thinkInterval); // Stop the thinking loop
+            clearInterval(this.thinkInterval); // إيقاف حلقة التفكير
         }
-        await this.qAgent.saveModel(); // Save the learned model weights upon disconnection
-        console.log(`[BOT-${this.username}] Model saved after disconnection.`);
+        await this.qAgent.saveModel(); // حفظ أوزان النموذج المتعلمة عند قطع الاتصال
+        console.log(`[BOT-${this.username}][INFO] تم حفظ النموذج بعد قطع الاتصال.`);
     }
 
     /**
-     * Handles unhandled errors that occur in the bot's operation. Saves the model.
-     * @param {Error} err - The error object.
+     * يتعامل مع الأخطاء غير المعالجة التي تحدث في عملية البوت. يحفظ النموذج.
+     * @param {Error} err - كائن الخطأ.
      * @private
      */
     async _onError(err) {
-        console.error(`[BOT-${this.username}][ERROR] An unhandled error occurred: ${err.message}`);
-        // Attempt to save the model on error to preserve learning progress
+        console.error(`[BOT-${this.username}][ERROR] حدث خطأ غير معالج: ${err.message}`);
+        // محاولة حفظ النموذج عند حدوث خطأ للحفاظ على تقدم التعلم
         await this.qAgent.saveModel();
     }
 
     /**
-     * Handles incoming chat messages from other players or bots.
-     * This is the basis for inter-bot communication and cooperation.
-     * @param {string} username - The sender's username.
-     * @param {string} message - The received message.
+     * يتعامل مع رسائل الدردشة الواردة من اللاعبين أو البوتات الأخرى.
+     * هذا هو الأساس للتواصل والتعاون بين البوتات.
+     * @param {string} username - اسم المستخدم للمرسل.
+     * @param {string} message - الرسالة المستلمة.
      * @private
      */
     async _onChat(username, message) {
-        if (username === this.username) return; // Ignore messages sent by this bot itself
+        if (username === this.username) return; // تجاهل الرسائل المرسلة من البوت نفسه
 
-        console.log(`[BOT-${this.username}][CHAT_RX] From ${username}: "${message}"`);
+        console.log(`[BOT-${this.username}][CHAT_RX] رسالة من ${username}: "${message}"`);
 
-        // --- Simple Message Parsing for Cooperative Actions ---
-        // These are basic reactive responses. For advanced MARL, bots would learn
-        // communication protocols and strategic coordination.
+        // --- تحليل الرسائل البسيط لإجراءات التعاون ---
+        // هذه استجابات تفاعلية أساسية. للتعلم المعزز متعدد الوكلاء (MARL) المتقدم،
+        // ستتعلم البوتات بروتوكولات الاتصال والتنسيق الاستراتيجي.
 
         if (message.includes('Need wood!')) {
-            const woodCount = this._getBotState()[8] * 64; // Denormalize wood count for real value
+            const woodCount = this._getBotState()[8] * 64; // تحويل عدد الخشب إلى قيمة حقيقية
             if (woodCount > 10) {
-                this.bot.chat(`@${username} ${this.username}: لدي ${woodCount.toFixed(0)} خشب! يمكنني مشاركة البعض في موقعي.`); // Arabic response
+                this.bot.chat(`@${username} ${this.username}: لدي ${woodCount.toFixed(0)} خشب! يمكنني مشاركة البعض في موقعي.`);
             } else {
-                this.bot.chat(`@${username} ${this.username}: ليس لدي الكثير من الخشب، لكنني سأحاول إيجاد بعض.`); // Arabic response
+                this.bot.chat(`@${username} ${this.username}: ليس لدي الكثير من الخشب، لكنني سأحاول إيجاد بعض.`);
             }
         } else if (message.includes('Have extra wood!')) {
-            this.bot.chat(`@${username} ${this.username}: شكراً للعرض! قد آتي لأجمع إذا احتجت ذلك.`); // Arabic response
+            this.bot.chat(`@${username} ${this.username}: شكراً للعرض! قد آتي لأجمع إذا احتجت ذلك.`);
         } else if (message.includes('Warning! Hostile mob')) {
-            console.log(`[BOT-${this.username}][COOP_ACTION] Received enemy warning from ${username}. Prioritizing safety.`);
+            console.log(`[BOT-${this.username}][COOP_ACTION] تلقيت تحذيرًا من عدو من ${username}. أولوية السلامة.`);
             const currentState = this._getBotState();
-            // If health is low, strongly consider fleeing. Otherwise, prepare for attack.
+            // إذا كانت الصحة منخفضة، فكر جديًا في الهروب. وإلا، استعد للهجوم.
             if (currentState[0] < 0.5) {
                 await this._executeBotAction(ACTIONS.FLEE_FROM_HOSTILE);
             } else {
-                // If not already aware of an enemy, attempt to attack
+                // إذا لم يكن على دراية بوجود عدو بالفعل، حاول الهجوم
                 if (currentState[4] === 0) {
                     await this._executeBotAction(ACTIONS.ATTACK_NEAREST_HOSTILE);
                 }
@@ -499,37 +510,40 @@ class BotAgent {
     }
 
     /**
-     * Gathers and normalizes the current state of the bot and its environment
-     * into a numerical array suitable as input for the neural network.
-     * This function defines the "observation space" of the agent,
-     * including resources, health, enemy presence, and game progression.
-     * @returns {number[]} An array of normalized numeric values representing the bot's state.
+     * يجمع ويوحد الحالة الحالية للبوت وبيئته في مصفوفة رقمية مناسبة كمدخل للشبكة العصبية.
+     * تحدد هذه الدالة "مساحة الملاحظة" (observation space) للوكيل،
+     * بما في ذلك الموارد، الصحة، وجود الأعداء، وتقدم اللعبة.
+     * @returns {number[]} مصفوفة من القيم الرقمية الموحدة التي تمثل حالة البوت.
      * @private
      */
     _getBotState() {
-        // Ensure mcData is available (should be initialized on first spawn)
+        // التأكد من توفر mcData (يجب تهيئته عند أول ظهور للبوت)
         if (!mcData) {
-            console.warn(`[BOT-${this.username}][STATE_ERR] mcData not initialized yet. Returning default state.`);
-            return new Array(INPUT_NODES).fill(0); // Return an array of zeros if mcData is missing
+            console.warn(`[BOT-${this.username}][STATE_ERR] لم يتم تهيئة mcData بعد. إرجاع حالة افتراضية.`);
+            return new Array(INPUT_NODES).fill(0); // إرجاع مصفوفة أصفار إذا كان mcData مفقودًا
+        }
+        if (!this.bot || !this.bot.entity) {
+            console.warn(`[BOT-${this.username}][STATE_ERR] كائن البوت أو الكيان غير متاح. إرجاع حالة افتراضية.`);
+            return new Array(INPUT_NODES).fill(0);
         }
 
-        // --- Basic Survival Stats (Normalized 0-1) ---
+        // --- إحصائيات البقاء الأساسية (موحدة من 0-1) ---
         const health = this.bot.health / 20;
         const food = this.bot.food / 20;
         const inWater = this.bot.entity.isInWater ? 1 : 0;
-        const isDay = this.bot.time.timeOfDay < 13000 ? 1 : 0; // Approximate day (0-24000 ticks)
+        const isDay = this.bot.time.timeOfDay < 13000 ? 1 : 0; // اليوم التقريبي (0-24000 تكة)
 
-        // --- Enemy Presence (Normalized) ---
+        // --- وجود الأعداء (موحدة) ---
         const nearestHostile = this.bot.nearestEntity(entity =>
             entity.type === 'mob' && entity.mobType && entity.mobType.isHostile &&
             entity.position.distanceTo(this.bot.entity.position) < 30
         );
         const hasEnemyNearby = nearestHostile ? 1 : 0;
-        const enemyDistance = nearestHostile ? nearestHostile.position.distanceTo(this.bot.entity.position) / 30 : 0; // 0-1 if within 30 blocks
+        const enemyDistance = nearestHostile ? nearestHostile.position.distanceTo(this.bot.entity.position) / 30 : 0; // 0-1 إذا كان ضمن 30 بلوك
 
-        // --- Inventory & Resources (Normalized by max stack or common quantities) ---
+        // --- المخزون والموارد (موحدة حسب الحد الأقصى للمكدس أو الكميات الشائعة) ---
         const hasFoodInInventory = this.bot.inventory.items().some(item => mcData.foodsArray.some(food => food.id === item.type)) ? 1 : 0;
-        const woodCount = this.bot.inventory.count(mcData.itemsByName.oak_log.id) / 64; // Max stack 64
+        const woodCount = this.bot.inventory.count(mcData.itemsByName.oak_log.id) / 64; // أقصى مكدس 64
         const hasWoodenPickaxe = this.bot.inventory.items().some(item => item.name === 'wooden_pickaxe') ? 1 : 0;
         const stoneCount = this.bot.inventory.count(mcData.itemsByName.cobblestone.id) / 64;
         const hasStonePickaxe = this.bot.inventory.items().some(item => item.name === 'stone_pickaxe') ? 1 : 0;
@@ -539,46 +553,58 @@ class BotAgent {
         const hasIronPickaxe = this.bot.inventory.items().some(item => item.name === 'iron_pickaxe') ? 1 : 0;
         const obsidianCount = this.bot.inventory.count(mcData.itemsByName.obsidian.id) / 64;
         const hasDiamondPickaxe = this.bot.inventory.items().some(item => item.name === 'diamond_pickaxe') ? 1 : 0;
-        const enderEyesCount = this.bot.inventory.count(mcData.itemsByName.ender_eye.id) / 12; // Need 12 for portal
+        const enderEyesCount = this.bot.inventory.count(mcData.itemsByName.ender_eye.id) / 12; // نحتاج 12 لبوابة النهاية
 
-        // --- Game Progression & Location (Binary flags) ---
+        // --- تقدم اللعبة والموقع (علامات ثنائية) ---
         const netherPortalExistsNearby = !!this.bot.findBlock({
             matching: mcData.blocksByName.nether_portal.id,
-            maxDistance: 100 // Check wider area for portals
+            maxDistance: 100 // التحقق من منطقة أوسع للبوابات
         });
         const inNether = this.bot.entity.dimension === 'minecraft:the_nether' ? 1 : 0;
         const inEnd = this.bot.entity.dimension === 'minecraft:the_end' ? 1 : 0;
 
-        // --- Basic "Memory" / Historical State (Conceptual for Recurrent RL) ---
-        // A simple flag for recent events. A true RNN would process sequences of states.
-        const recentlyDied = this.lastDiedTime && (Date.now() - this.lastDiedTime < 10000) ? 1 : 0; // Died in last 10 seconds
+        // --- "الذاكرة" الأساسية / الحالة التاريخية (مفهومي للتعلم المعزز المتكرر) ---
+        // علامة بسيطة للأحداث الأخيرة. شبكة RNN حقيقية ستقوم بمعالجة تسلسلات من الحالات.
+        const recentlyDied = this.lastDiedTime && (Date.now() - this.lastDiedTime < 10000) ? 1 : 0; // مات في آخر 10 ثوانٍ
 
-        // --- Multi-Agent Collaboration State ---
+        // --- حالة التعاون متعدد الوكلاء ---
         const nearestOtherPlayer = this.bot.nearestEntity(entity => entity.type === 'player' && entity.username !== this.username);
         const hasOtherPlayerNearby = nearestOtherPlayer ? 1 : 0;
-        const otherPlayerDistance = nearestOtherPlayer ? nearestOtherPlayer.position.distanceTo(this.bot.entity.position) / 60 : 0; // Normalize by 60 blocks
+        const otherPlayerDistance = nearestOtherPlayer ? nearestOtherPlayer.position.distanceTo(this.bot.entity.position) / 60 : 0; // موحدة بـ 60 بلوك
 
         return [
             health, food, inWater, isDay, hasEnemyNearby, enemyDistance,
             hasFoodInInventory, woodCount, hasWoodenPickaxe, stoneCount,
             hasStonePickaxe, coalCount, ironOreCount, ironIngotCount,
             hasIronPickaxe, obsidianCount, hasDiamondPickaxe, enderEyesCount,
-            netherPortalExistsNearby, inNether, inEnd, // These are already 0/1 from !! conversion
+            netherPortalExistsNearby, inNether, inEnd, // هذه القيم بالفعل 0/1 من التحويل المنطقي
             recentlyDied, hasOtherPlayerNearby, otherPlayerDistance
         ];
     }
 
     /**
-     * Executes a specific bot action based on its ID. This function contains the
-     * complex logic for multi-step actions and interacts with the Mineflayer API.
-     * @param {number} actionId - The ID of the action to execute.
-     * @returns {Promise<{success: boolean, actionReward: number}>} Object indicating success and immediate reward.
+     * ينفذ إجراء بوت محدد بناءً على معرفه. تحتوي هذه الدالة على المنطق المعقد
+     * لإجراءات متعددة الخطوات وتتفاعل مع Mineflayer API.
+     * تم تحسينها لتوفير رسائل خطأ أكثر تفصيلاً.
+     * @param {number} actionId - معرف الإجراء المراد تنفيذه.
+     * @returns {Promise<{success: boolean, actionReward: number}>} كائن يشير إلى النجاح والمكافأة الفورية.
      * @private
      */
     async _executeBotAction(actionId) {
-        console.log(`[BOT-${this.username}][ACTION_EXEC] Attempting to execute: ${ACTION_NAMES[actionId]}`);
+        console.log(`[BOT-${this.username}][ACTION_EXEC] محاولة تنفيذ: ${ACTION_NAMES[actionId]}`);
         let success = false;
-        let actionReward = 0; // Immediate reward for this specific action
+        let actionReward = 0; // المكافأة الفورية لهذا الإجراء المحدد
+
+        // التحقق من توفر كائن البوت قبل محاولة تنفيذ أي إجراءات
+        if (!this.bot || !this.bot.entity) {
+            console.error(`[BOT-${this.username}][ACTION_ERR] كائن البوت غير متاح لتنفيذ الإجراء ${ACTION_NAMES[actionId]}.`);
+            return { success: false, actionReward: -1.0 };
+        }
+        if (!mcData) {
+            console.error(`[BOT-${this.username}][ACTION_ERR] بيانات Minecraft (mcData) غير مهيأة لتنفيذ الإجراء ${ACTION_NAMES[actionId]}.`);
+            return { success: false, actionReward: -1.0 };
+        }
+
 
         try {
             switch (actionId) {
@@ -591,8 +617,9 @@ class BotAgent {
                         await this.bot.pathfinder.goto(randomGoal);
                         actionReward = 0.1;
                         success = true;
+                        console.log(`[BOT-${this.username}][INFO] نجاح المشي العشوائي إلى X:${randomX.toFixed(0)}, Z:${randomZ.toFixed(0)}.`);
                     } catch (err) {
-                        console.log(`[BOT-${this.username}][ACTION_ERR] Random walk to ${randomX.toFixed(0)}, ${randomZ.toFixed(0)} failed: ${err.message}`);
+                        console.log(`[BOT-${this.username}][WARN] فشل المشي العشوائي: ${err.message}`);
                         actionReward = -0.1;
                     }
                     break;
@@ -609,8 +636,9 @@ class BotAgent {
                         this.bot.setControlState('forward', false);
                         actionReward = 0.5;
                         success = true;
+                        console.log(`[BOT-${this.username}][INFO] هاجمت ${nearestHostile.displayName} بنجاح.`);
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No hostile mob nearby to attack.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد كائن معادٍ قريب للهجوم.`);
                         actionReward = -0.1;
                     }
                     break;
@@ -631,12 +659,13 @@ class BotAgent {
                             await this.bot.pathfinder.goto(fleeGoal);
                             actionReward = 0.8;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] نجاح الهروب من ${nearestHostile.displayName}.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Flee attempt failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل محاولة الهروب: ${err.message}`);
                             actionReward = -0.5;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No hostile mob to flee from.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد كائن معادٍ للهروب منه.`);
                         actionReward = -0.1;
                     }
                     break;
@@ -650,14 +679,14 @@ class BotAgent {
                         try {
                             const dirtItem = this.bot.inventory.items().find(item => item.type === dirtId);
                             if (!dirtItem) {
-                                console.log(`[BOT-${this.username}][ACTION_INFO] No dirt item in inventory despite count.`);
+                                console.log(`[BOT-${this.username}][WARN] لا يوجد عنصر تراب في المخزون على الرغم من العدد الكافي.`);
                                 actionReward = -0.2;
                                 break;
                             }
                             await this.bot.setQuickBarSlot(dirtItem.slot);
                             const currentPos = this.bot.entity.position.floor();
 
-                            // Build a 3x3 base (floor)
+                            // بناء قاعدة (أرضية) 3x3
                             for (let x = -1; x <= 1; x++) {
                                 for (let z = -1; z <= 1; z++) {
                                     const targetPos = currentPos.offset(x, -1, z);
@@ -669,10 +698,11 @@ class BotAgent {
                                     }
                                 }
                             }
-                            // Build 3 layers of walls (simple box)
+                            // بناء 3 طبقات من الجدران (صندوق بسيط)
                             for (let y = 0; y < 3; y++) {
                                 for (let x = -1; x <= 1; x++) {
                                     for (let z = -1; z <= 1; z++) {
+                                        // وضع الجدران الخارجية فقط، وليس داخل مساحة البوت
                                         if (Math.abs(x) === 1 || Math.abs(z) === 1) {
                                             const targetPos = currentPos.offset(x, y, z);
                                             const referenceBlock = this.bot.blockAt(targetPos.offset(0, -1, 0));
@@ -687,13 +717,13 @@ class BotAgent {
                             }
                             actionReward += 5.0;
                             success = true;
-                            console.log(`[BOT-${this.username}][ACTION_INFO] Basic dirt shelter constructed.`);
+                            console.log(`[BOT-${this.username}][INFO] تم بناء ملجأ ترابي أساسي بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Building failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل البناء: ${err.message}`);
                             actionReward = -1.0;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Not enough dirt for building (need 16).`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد تراب كافٍ للبناء (تحتاج 16).`);
                         actionReward = -0.2;
                     }
                     break;
@@ -709,12 +739,13 @@ class BotAgent {
                             await this.bot.dig(woodBlock);
                             actionReward = 1.5;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم تعدين الخشب بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Digging wood failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل تعدين الخشب: ${err.message}`);
                             actionReward = -0.5;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No wood block found nearby to dig.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد جذع شجر قريب لتعدينه.`);
                         actionReward = -0.2;
                     }
                     break;
@@ -727,12 +758,13 @@ class BotAgent {
                             await this.bot.craft(woodenPickaxeRecipe, 1);
                             actionReward = 2.0;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم صناعة فأس خشبي بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Crafting wooden pickaxe failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل صناعة فأس خشبي: ${err.message}`);
                             actionReward = -1.0;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No wooden pickaxe recipe available or missing materials.`);
+                        console.log(`[BOT-${this.username}][WARN] لا توجد وصفة للفأس الخشبي أو المواد مفقودة.`);
                         actionReward = -0.5;
                     }
                     break;
@@ -745,12 +777,13 @@ class BotAgent {
                             await this.bot.collect(itemDrop);
                             actionReward = 0.7;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم جمع العنصر المتساقط بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Collecting item failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل جمع العنصر: ${err.message}`);
                             actionReward = -0.3;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No dropped items nearby to collect.`);
+                        console.log(`[BOT-${this.username}][WARN] لا توجد عناصر متساقطة قريبة لجمعها.`);
                         actionReward = -0.1;
                     }
                     break;
@@ -762,26 +795,31 @@ class BotAgent {
                         maxDistance: 16,
                         count: 1
                     });
-                    if (bed && !this._getBotState()[3]) {
+                    if (bed && !this._getBotState()[3]) { // إذا كان الليل
                         try {
                             await this.bot.sleep(bed);
                             actionReward = 1.0;
                             success = true;
-                            setTimeout(async () => { await this.bot.wake(); }, 5000);
+                            console.log(`[BOT-${this.username}][INFO] البوت نائم.`);
+                            setTimeout(async () => {
+                                await this.bot.wake();
+                                console.log(`[BOT-${this.username}][INFO] البوت استيقظ.`);
+                            }, 5000); // يستيقظ بعد 5 ثوانٍ (محاكاة مرور الليل)
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Sleeping failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل النوم: ${err.message}`);
                             actionReward = -0.5;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No bed found or not night time.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد سرير قريب أو ليس وقت الليل.`);
                         actionReward = -0.2;
                     }
                     break;
                 }
 
                 case ACTIONS.IDLE: {
-                    actionReward = 0.05;
+                    actionReward = 0.05; // مكافأة صغيرة لمنع التقييم السلبي المستمر
                     success = true;
+                    console.log(`[BOT-${this.username}][INFO] البوت في وضع الخمول.`);
                     break;
                 }
 
@@ -790,18 +828,19 @@ class BotAgent {
                         matching: mcData.blocksByName.stone.id,
                         maxDistance: 16
                     });
-                    const hasWoodenPick = this._getBotState()[9];
+                    const hasWoodenPick = this._getBotState()[9]; // التحقق من وجود فأس خشبي
                     if (stoneBlock && this.bot.canDigBlock(stoneBlock) && hasWoodenPick) {
                         try {
                             await this.bot.dig(stoneBlock);
                             actionReward = 1.8;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم تعدين الحجر بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Mining stone failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل تعدين الحجر: ${err.message}`);
                             actionReward = -0.6;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No stone found or missing wooden pickaxe.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد حجر قريب أو فأس خشبي مفقود.`);
                         actionReward = -0.3;
                     }
                     break;
@@ -809,18 +848,19 @@ class BotAgent {
 
                 case ACTIONS.CRAFT_STONE_PICKAXE: {
                     const stonePickaxeRecipe = this.bot.recipesFor(mcData.itemsByName.stone_pickaxe.id).find(r => true);
-                    const hasEnoughStone = this._getBotState()[10] * 64 >= 3;
+                    const hasEnoughStone = this._getBotState()[10] * 64 >= 3; // عدد الكوبلستون بعد إلغاء التوحيد
                     if (stonePickaxeRecipe && hasEnoughStone) {
                         try {
                             await this.bot.craft(stonePickaxeRecipe, 1);
                             actionReward = 3.0;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم صناعة فأس حجري بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Crafting stone pickaxe failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل صناعة فأس حجري: ${err.message}`);
                             actionReward = -1.2;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No stone pickaxe recipe or missing materials (3 cobblestone).`);
+                        console.log(`[BOT-${this.username}][WARN] لا توجد وصفة للفأس الحجري أو المواد مفقودة (3 كوبلستون).`);
                         actionReward = -0.6;
                     }
                     break;
@@ -837,12 +877,13 @@ class BotAgent {
                             await this.bot.dig(coalOre);
                             actionReward = 2.5;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم تعدين الفحم بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Mining coal failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل تعدين الفحم: ${err.message}`);
                             actionReward = -0.8;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No coal ore found or missing suitable pickaxe.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد فحم خام قريب أو فأس مناسب مفقود.`);
                         actionReward = -0.4;
                     }
                     break;
@@ -859,12 +900,13 @@ class BotAgent {
                             await this.bot.dig(ironOre);
                             actionReward = 4.0;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم تعدين الحديد بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Mining iron failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل تعدين الحديد: ${err.message}`);
                             actionReward = -1.5;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No iron ore found or missing suitable pickaxe.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد خام حديد قريب أو فأس مناسب مفقود.`);
                         actionReward = -0.5;
                     }
                     break;
@@ -878,12 +920,13 @@ class BotAgent {
                             await this.bot.craft(furnaceRecipe, 1);
                             actionReward = 3.5;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم صناعة فرن بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Crafting furnace failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل صناعة فرن: ${err.message}`);
                             actionReward = -1.5;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No furnace recipe or missing materials (8 cobblestone).`);
+                        console.log(`[BOT-${this.username}][WARN] لا توجد وصفة للفرن أو المواد مفقودة (8 كوبلستون).`);
                         actionReward = -0.7;
                     }
                     break;
@@ -895,11 +938,12 @@ class BotAgent {
                     const hasRawIron = this._getBotState()[13] * 64 >= 1;
 
                     if (hasFurnaceInInventory && hasCoal && hasRawIron) {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Attempting to smelt iron (conceptual).`);
+                        console.log(`[BOT-${this.username}][INFO] محاولة صهر الحديد (مفهومي).`);
                         actionReward = 5.0;
                         success = true;
+                        // التتطبيق الفعلي للصهر معقد ويتطلب وضع الفرن، التفاعل مع مخزونه، الانتظار، ثم أخذ السبائك.
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Cannot smelt: Missing furnace, coal, or raw iron.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يمكن صهر الحديد: فرن أو فحم أو خام حديد مفقود.`);
                         actionReward = -0.8;
                     }
                     break;
@@ -913,12 +957,13 @@ class BotAgent {
                             await this.bot.craft(ironPickaxeRecipe, 1);
                             actionReward = 7.0;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] تم صناعة فأس حديدي بنجاح.`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Crafting iron pickaxe failed: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل صناعة فأس حديدي: ${err.message}`);
                             actionReward = -2.5;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No iron pickaxe recipe or missing materials (3 iron ingots).`);
+                        console.log(`[BOT-${this.username}][WARN] لا توجد وصفة للفأس الحديدي أو المواد مفقودة (3 سبائك حديد).`);
                         actionReward = -1.0;
                     }
                     break;
@@ -932,21 +977,22 @@ class BotAgent {
                             maxDistance: 32
                         });
                         if (diamondOre && this.bot.canDigBlock(diamondOre)) {
-                            console.log(`[BOT-${this.username}][ACTION_INFO] Found diamond ore, attempting to mine.`);
+                            console.log(`[BOT-${this.username}][INFO] تم العثور على خام ألماس، محاولة تعدينه.`);
                             try {
                                 await this.bot.dig(diamondOre);
                                 actionReward = 15.0;
                                 success = true;
+                                console.log(`[BOT-${this.username}][INFO] تم تعدين الألماس بنجاح.`);
                             } catch (err) {
-                                console.log(`[BOT-${this.username}][ACTION_ERR] Mining diamonds failed: ${err.message}`);
+                                console.log(`[BOT-${this.username}][WARN] فشل تعدين الألماس: ${err.message}`);
                                 actionReward = -3.0;
                             }
                         } else {
-                            console.log(`[BOT-${this.username}][ACTION_INFO] No diamond ore found nearby.`);
+                            console.log(`[BOT-${this.username}][WARN] لا يوجد خام ألماس قريب.`);
                             actionReward = -1.0;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No suitable pickaxe (iron or diamond) to mine diamonds.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد فأس مناسب (حديدي أو ألماس) لتعدين الألماس.`);
                         actionReward = -1.5;
                     }
                     break;
@@ -957,11 +1003,12 @@ class BotAgent {
                     const hasFlintAndSteel = this.bot.inventory.items().some(item => item.name === 'flint_and_steel');
 
                     if (obsidianCount >= 14 && hasFlintAndSteel) {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Attempting to craft a Nether Portal (conceptual).`);
+                        console.log(`[BOT-${this.username}][INFO] محاولة صناعة بوابة النذر (مفهومي).`);
                         actionReward = 50.0;
                         success = true;
+                        // منطق بناء البوابة الفعلي معقد للغاية، ويتضمن وضع كتل دقيق.
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Not enough obsidian (need 14) or no flint and steel to craft portal.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد أوبسيديان كافٍ (تحتاج 14) أو لا يوجد فلينت وستيل لصناعة البوابة.`);
                         actionReward = -2.0;
                     }
                     break;
@@ -973,30 +1020,31 @@ class BotAgent {
                         maxDistance: 10
                     });
                     if (netherPortalBlock) {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Found Nether Portal, attempting to enter.`);
+                        console.log(`[BOT-${this.username}][INFO] تم العثور على بوابة النذر، محاولة الدخول.`);
                         try {
                             await this.bot.pathfinder.goto(new GoalBlock(netherPortalBlock.position.x, netherPortalBlock.position.y, netherPortalBlock.position.z));
                             actionReward = 100.0;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] دخلت البوت النذر بنجاح (مفهومي).`);
                         } catch (err) {
-                            console.log(`[BOT-${this.username}][ACTION_ERR] Failed to go to Nether Portal: ${err.message}`);
+                            console.log(`[BOT-${this.username}][WARN] فشل الانتقال إلى بوابة النذر: ${err.message}`);
                             actionReward = -10.0;
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No Nether Portal found nearby to enter.`);
+                        console.log(`[BOT-${this.username}][WARN] لم يتم العثور على بوابة نذر قريبة للدخول.`);
                         actionReward = -2.0;
                     }
                     break;
                 }
 
                 case ACTIONS.KILL_DRAGON: {
-                    console.log(`[BOT-${this.username}][ACTION_INFO] Attempting to kill the Ender Dragon (conceptual action).`);
-                    if (this._getBotState()[20] === 1) {
+                    console.log(`[BOT-${this.username}][INFO] محاولة قتل تنين النهاية (إجراء مفهومي).`);
+                    if (this._getBotState()[20] === 1) { // إذا كان البوت في بُعد النهاية
                         actionReward = 1000.0;
                         success = true;
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Placeholder: Bot would now execute complex Ender Dragon fight logic.`);
+                        console.log(`[BOT-${this.username}][INFO] مكان مؤقت: سيقوم البوت الآن بتنفيذ منطق قتال تنين النهاية المعقد.`);
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Not in The End dimension to kill dragon.`);
+                        console.log(`[BOT-${this.username}][WARN] ليس في بُعد النهاية لقتل التنين.`);
                         actionReward = -5.0;
                     }
                     break;
@@ -1009,12 +1057,13 @@ class BotAgent {
                     if (currentWood < 10 && hasOtherPlayerNearby) {
                         const nearestPlayer = this.bot.nearestEntity(entity => entity.type === 'player' && entity.username !== this.username);
                         if (nearestPlayer) {
-                            this.bot.chat(`@${nearestPlayer.username} ${this.username}: I need wood! Can you help?`);
+                            this.bot.chat(`@${nearestPlayer.username} ${this.username}: أحتاج للخشب! هل يمكنك المساعدة؟`);
                             actionReward = 0.2;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] أرسلت طلب خشب إلى ${nearestPlayer.username}.`);
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Not needing wood or no other players nearby to request from.`);
+                        console.log(`[BOT-${this.username}][WARN] لا أحتاج للخشب أو لا يوجد لاعبون آخرون قريبون لطلب المساعدة.`);
                         actionReward = -0.1;
                     }
                     break;
@@ -1027,12 +1076,13 @@ class BotAgent {
                     if (currentWood > 30 && hasOtherPlayerNearby) {
                         const nearestPlayer = this.bot.nearestEntity(entity => entity.type === 'player' && entity.username !== this.username);
                         if (nearestPlayer) {
-                            this.bot.chat(`@${nearestPlayer.username} ${this.username}: I have extra wood if you need some!`);
+                            this.bot.chat(`@${nearestPlayer.username} ${this.username}: لدي خشب إضافي إذا احتجت!`);
                             actionReward = 0.2;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] عرضت خشبًا على ${nearestPlayer.username}.`);
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] Not enough wood to offer or no other players nearby.`);
+                        console.log(`[BOT-${this.username}][WARN] ليس لدي خشب كافٍ للعرض أو لا يوجد لاعبون آخرون قريبون.`);
                         actionReward = -0.1;
                     }
                     break;
@@ -1046,26 +1096,27 @@ class BotAgent {
                         const nearestPlayer = this.bot.nearestEntity(entity => entity.type === 'player' && entity.username !== this.username);
                         const enemy = this.bot.nearestEntity(entity => entity.type === 'mob' && entity.mobType && entity.mobType.isHostile);
                         if (nearestPlayer && enemy) {
-                            this.bot.chat(`@${nearestPlayer.username} ${this.username}: Warning! Hostile mob (${enemy.displayName}) at my location: ${enemy.position.x.toFixed(0)}, ${enemy.position.y.toFixed(0)}, ${enemy.position.z.toFixed(0)}!`);
+                            this.bot.chat(`@${nearestPlayer.username} ${this.username}: تحذير! كائن معادٍ (${enemy.displayName}) في موقعي: ${enemy.position.x.toFixed(0)}, ${enemy.position.y.toFixed(0)}, ${enemy.position.z.toFixed(0)}!`);
                             actionReward = 0.5;
                             success = true;
+                            console.log(`[BOT-${this.username}][INFO] حذرت ${nearestPlayer.username} من العدو.`);
                         }
                     } else {
-                        console.log(`[BOT-${this.username}][ACTION_INFO] No enemy to warn about or no other players nearby.`);
+                        console.log(`[BOT-${this.username}][WARN] لا يوجد عدو للتحذير منه أو لا يوجد لاعبون آخرون قريبون.`);
                         actionReward = -0.1;
                     }
                     break;
                 }
 
                 default: {
-                    console.log(`[BOT-${this.username}][ACTION_ERR] Unknown action ID: ${actionId}`);
+                    console.log(`[BOT-${this.username}][ERROR] معرف إجراء غير معروف: ${actionId}`);
                     actionReward = -0.05;
                     break;
                 }
             }
         } catch (e) {
-            console.error(`[BOT-${this.username}][ACTION_EXCEPTION] Exception during action ${ACTION_NAMES[actionId]}: ${e.message}`);
-            actionReward = -0.7;
+            console.error(`[BOT-${this.username}][EXCEPTION] استثناء أثناء تنفيذ الإجراء ${ACTION_NAMES[actionId]}: ${e.message}`);
+            actionReward = -0.7; // عقوبة شديدة للأخطاء غير المعالجة أثناء الإجراء
         }
 
         return { success, actionReward };
@@ -1073,65 +1124,64 @@ class BotAgent {
 
 
     /**
-     * Calculates the reward received by the bot based on the transition from an
-     * old state to a new state after taking an action. This is crucial for
-     * guiding the RL agent's learning process.
-     * Reward shaping is used to encourage desired behaviors and discourage undesirable ones.
-     * @param {Array<number>} oldState - The state of the bot before the action.
-     * @param {Array<number>} newState - The state of the bot after the action.
-     * @param {boolean} actionSuccess - Indicates if the executed action was successful.
-     * @returns {number} The calculated reward value.
+     * يحسب المكافأة التي يتلقاها البوت بناءً على الانتقال من حالة قديمة إلى حالة جديدة بعد اتخاذ إجراء.
+     * هذا أمر حاسم لتوجيه عملية تعلم وكيل التعلم المعزز.
+     * يتم استخدام تشكيل المكافأة (Reward Shaping) لتشجيع السلوكيات المرغوبة وتثبيط غير المرغوبة.
+     * @param {Array<number>} oldState - حالة البوت قبل الإجراء.
+     * @param {Array<number>} newState - حالة البوت بعد الإجراء.
+     * @param {boolean} actionSuccess - يشير إلى ما إذا كان الإجراء الذي تم تنفيذه ناجحًا.
+     * @returns {number} قيمة المكافأة المحسوبة.
      * @private
      */
     _calculateReward(oldState, newState, actionSuccess) {
         let reward = 0;
 
-        // --- Base Survival & Health ---
-        reward += 0.01; // Small positive reward for simply staying alive each tick
-        reward += (newState[0] - oldState[0]) * 10; // Significant reward for health gain, large penalty for health loss
-        reward += (newState[1] - oldState[1]) * 5;  // Reward for food gain, penalty for loss
-        if (newState[0] < 0.2 && newState[0] < oldState[0]) { reward -= 15; } // Severe penalty for critically low health
-        if (newState[1] < 0.2 && newState[1] < oldState[1]) { reward -= 10; } // Severe penalty for critically low food
-        if (newState[21] === 1 && oldState[21] === 0) { reward -= 50; } // Large penalty for dying (recentlyDied flag)
+        // --- البقاء الأساسي والصحة ---
+        reward += 0.01; // مكافأة إيجابية صغيرة لمجرد البقاء على قيد الحياة في كل تكة
+        reward += (newState[0] - oldState[0]) * 10; // مكافأة كبيرة لزيادة الصحة، وعقوبة كبيرة لفقدان الصحة
+        reward += (newState[1] - oldState[1]) * 5;  // مكافأة لزيادة الغذاء، وعقوبة لفقدانه
+        if (newState[0] < 0.2 && newState[0] < oldState[0]) { reward -= 15; } // عقوبة شديدة لانخفاض الصحة بشكل حرج
+        if (newState[1] < 0.2 && newState[1] < oldState[1]) { reward -= 10; } // عقوبة شديدة لانخفاض الغذاء بشكل حرج
+        if (newState[21] === 1 && oldState[21] === 0) { reward -= 50; } // عقوبة كبيرة للموت (علامة recentlyDied)
 
-        // --- Enemy Interaction ---
-        if (newState[4] === 0 && oldState[4] === 1) { reward += 20; } // Big reward for successfully escaping/eliminating hostile
-        else if (newState[4] === 1 && oldState[4] === 1 && newState[5] < oldState[5]) { reward -= 3; } // Penalty if enemy gets closer
-        else if (newState[4] === 1 && oldState[4] === 0) { reward -= 7; } // Penalty for new enemy appearing nearby
+        // --- التفاعل مع الأعداء ---
+        if (newState[4] === 0 && oldState[4] === 1) { reward += 20; } // مكافأة كبيرة للهروب/القضاء على عدو بنجاح
+        else if (newState[4] === 1 && oldState[4] === 1 && newState[5] < oldState[5]) { reward -= 3; } // عقوبة إذا اقترب العدو
+        else if (newState[4] === 1 && oldState[4] === 0) { reward -= 7; } // عقوبة لظهور عدو جديد قريب
 
-        // --- Resource Gathering Progression (Tier-based rewards) ---
-        // Wood
+        // --- تقدم جمع الموارد (مكافآت حسب المستويات) ---
+        // خشب
         if (newState[8] > oldState[8]) { reward += (newState[8] - oldState[8]) * 5; }
-        // Stone/Cobblestone
+        // حجر/كوبلستون
         if (newState[9] > oldState[9]) { reward += (newState[9] - oldState[9]) * 7; }
-        // Coal
+        // فحم
         if (newState[11] > oldState[11]) { reward += (newState[11] - oldState[11]) * 8; }
-        // Iron Ore
+        // خام الحديد
         if (newState[12] > oldState[12]) { reward += (newState[12] - oldState[12]) * 15; }
-        // Iron Ingots (from smelting)
+        // سبائك الحديد (من الصهر)
         if (newState[13] > oldState[13]) { reward += (newState[13] - oldState[13]) * 20; }
-        // Obsidian
+        // أوبسيديان
         if (newState[16] > oldState[16]) { reward += (newState[16] - oldState[16]) * 30; }
-        // Ender Eyes
+        // عيون الإندر
         if (newState[18] > oldState[18]) { reward += (newState[18] - oldState[18]) * 40; }
 
-        // --- Tool/Crafting Progression (Milestone rewards) ---
-        if (newState[9] === 1 && oldState[9] === 0) { reward += 10; } // Crafted Wooden Pickaxe
-        if (newState[11] === 1 && oldState[11] === 0) { reward += 20; } // Crafted Stone Pickaxe
-        if (newState[15] === 1 && oldState[15] === 0) { reward += 40; } // Crafted Iron Pickaxe
-        if (newState[17] === 1 && oldState[17] === 0) { reward += 80; } // Crafted Diamond Pickaxe
+        // --- تقدم الأدوات/الصناعة (مكافآت الإنجاز) ---
+        if (newState[9] === 1 && oldState[9] === 0) { reward += 10; } // صناعة فأس خشبي
+        if (newState[11] === 1 && oldState[11] === 0) { reward += 20; } // صناعة فأس حجري
+        if (newState[15] === 1 && oldState[15] === 0) { reward += 40; } // صناعة فأس حديدي
+        if (newState[17] === 1 && oldState[17] === 0) { reward += 80; } // صناعة فأس ألماس
 
-        // --- Major Game Progression Goals (Very High Rewards) ---
-        if (newState[18] === 1 && oldState[18] === 0) { reward += 200; } // Nether Portal Built
-        if (newState[19] === 1 && oldState[19] === 0) { reward += 500; } // Entered Nether
-        if (newState[20] === 1 && oldState[20] === 0) { reward += 1000; } // Entered The End
-        // Hypothetical HUGE reward for killing Ender Dragon (would be triggered by game event)
+        // --- أهداف التقدم الرئيسية في اللعبة (مكافآت عالية جدًا) ---
+        if (newState[18] === 1 && oldState[18] === 0) { reward += 200; } // بناء بوابة النذر
+        if (newState[19] === 1 && oldState[19] === 0) { reward += 500; } // دخول النذر
+        if (newState[20] === 1 && oldState[20] === 0) { reward += 1000; } // دخول النهاية
+        // مكافأة ضخمة افتراضية لقتل تنين النهاية (سيتم تفعيلها بحدث داخل اللعبة)
         // if (DRAGON_KILLED_GLOBAL_EVENT) { reward += 5000; }
 
-        // --- Multi-Agent Collaboration Rewards ---
+        // --- مكافآت التعاون متعدد الوكلاء ---
         if (newState[23] === 1 && oldState[23] === 0) { reward += 0.5; }
 
-        // --- Penalty for Failed Actions ---
+        // --- عقوبة الإجراءات الفاشلة ---
         if (!actionSuccess) {
             reward -= 1.0;
         }
@@ -1140,244 +1190,243 @@ class BotAgent {
     }
 
     /**
-     * The main thinking loop for this specific bot agent.
-     * Perceives the environment, makes decisions, executes actions, and learns.
-     * This function is called repeatedly by `setInterval`.
+     * حلقة التفكير الرئيسية لوكيل البوت المحدد هذا.
+     * يلاحظ البيئة، يتخذ القرارات، ينفذ الإجراءات، ويتعلم.
+     * يتم استدعاء هذه الدالة بشكل متكرر بواسطة `setInterval`.
      * @private
      */
     async _think() {
-        // Ensure Minecraft data is loaded before proceeding with state observation
+        // التأكد من تحميل بيانات Minecraft قبل المتابعة
         if (!mcData) {
-            console.log(`[BOT-${this.username}][THINK] Waiting for Minecraft data to initialize...`);
+            console.log(`[BOT-${this.username}][THINK] انتظار تهيئة بيانات ماينكرافت...`);
+            return;
+        }
+        if (!this.bot || !this.bot.entity) {
+            console.warn(`[BOT-${this.username}][THINK] كائن البوت أو الكيان غير متاح. تخطي دورة التفكير.`);
             return;
         }
 
-        // Get the current state observation from the Minecraft environment
+
+        // الحصول على ملاحظة الحالة الحالية من بيئة Minecraft
         const currentState = this._getBotState();
-        // Log key state indicators for debugging and monitoring bot's situation
-        console.log(`[BOT-${this.username}][STATE] H:${currentState[0].toFixed(2)} F:${currentState[1].toFixed(2)} E:${currentState[4]} W:${currentState[8].toFixed(2)} S:${currentState[9].toFixed(2)} I:${currentState[13].toFixed(2)} DP:${currentState[17]} NP:${currentState[18]} N:${currentState[19]} E:${currentState[20]} Died:${currentState[21]} Player:${currentState[22]} Dist:${currentState[23].toFixed(2)}`);
+        // تسجيل مؤشرات الحالة الرئيسية للتصحيح ومراقبة وضع البوت
+        console.log(`[BOT-${this.username}][STATE] الحلقة: ${this.currentEpisode + 1} | الصحة:${currentState[0].toFixed(2)} الغذاء:${currentState[1].toFixed(2)} عدو:${currentState[4]} خشب:${currentState[8].toFixed(2)} حجر:${currentState[9].toFixed(2)} حديد:${currentState[13].toFixed(2)} فأس ألماس:${currentState[17]} بوابة نذر:${currentState[18]} في النذر:${currentState[19]} في النهاية:${currentState[20]} مات مؤخرًا:${currentState[21]} لاعب:${currentState[22]} مسافة لاعب:${currentState[23].toFixed(2)}`);
 
-        let done = false; // Flag to indicate if the current episode has ended
+        let done = false; // علامة للإشارة إلى ما إذا كانت الحلقة الحالية قد انتهت
 
-        // If this is not the first tick in an episode, process the previous experience
+        // إذا لم تكن هذه هي التكة الأولى في الحلقة، قم بمعالجة التجربة السابقة
         if (this.lastState !== null && this.lastAction !== null) {
-            // 1. Calculate the reward received from the previous action and state transition
-            const reward = this._calculateReward(this.lastState, currentState, true); // Assuming action was successful
-            this.currentEpisodeReward += reward; // Accumulate total reward for the current episode
-            console.log(`[BOT-${this.username}][REWARD] Prev action reward: ${reward.toFixed(2)}. Total Episode Reward: ${this.currentEpisodeReward.toFixed(2)}`);
+            // 1. حساب المكافأة المستلمة من الإجراء السابق وانتقال الحالة
+            const reward = this._calculateReward(this.lastState, currentState, true); // بافتراض أن الإجراء كان ناجحًا
+            this.currentEpisodeReward += reward; // تراكم إجمالي المكافأة للحلقة الحالية
+            console.log(`[BOT-${this.username}][REWARD] مكافأة الإجراء السابق: ${reward.toFixed(2)}. إجمالي مكافأة الحلقة: ${this.currentEpisodeReward.toFixed(2)}`);
 
-            // 2. Store the (state, action, reward, next_state, done) tuple in the replay buffer
+            // 2. تخزين tuple (state, action, reward, next_state, done) في ذاكرة إعادة التجربة
             this.qAgent.remember(this.lastState, this.lastAction, reward, currentState, done);
-            // 3. Train the Q-Network model using a random batch from the replay buffer
+            // 3. تدريب نموذج Q-Network باستخدام دفعة عشوائية من ذاكرة إعادة التجربة
             await this.qAgent.trainModel();
         }
 
-        // 4. Choose the next action based on the current state using the Q-agent's policy
+        // 4. اختيار الإجراء التالي بناءً على الحالة الحالية باستخدام سياسة وكيل Q-Agent
         const actionId = this.qAgent.chooseAction(currentState);
-        console.log(`[BOT-${this.username}][DECISION] Chose action: ${ACTION_NAMES[actionId]} (Epsilon: ${this.qAgent.epsilon.toFixed(4)})`);
+        console.log(`[BOT-${this.username}][DECISION] اختار الإجراء: ${ACTION_NAMES[actionId]} (إبسيلون: ${this.qAgent.epsilon.toFixed(4)})`);
 
-        // Logic to prevent the bot from getting stuck idling excessively.
-        // If it idles too many times consecutively and exploration is low, temporarily boost exploration.
+        // منطق لمنع البوت من الوقوع في الخمول المفرط.
+        // إذا كان خاملاً لعدد كبير جدًا من المرات المتتالية وكان الاستكشاف منخفضًا، فقم بزيادة الاستكشاف مؤقتًا.
         if (actionId === ACTIONS.IDLE) {
             this.consecutiveIdleActions++;
             if (this.consecutiveIdleActions > 15 && this.qAgent.epsilon < 0.1) {
-                console.log(`[BOT-${this.username}][INFO] Idling excessively, temporarily boosting exploration.`);
-                this.qAgent.epsilon = 0.3; // Temporarily increase epsilon
-                this.consecutiveIdleActions = 0; // Reset counter
+                console.log(`[BOT-${this.username}][WARN] خمول مفرط، زيادة مؤقتة في الاستكشاف.`);
+                this.qAgent.epsilon = 0.3; // زيادة إبسيلون مؤقتًا
+                this.consecutiveIdleActions = 0; // إعادة تعيين العداد
             }
         } else {
-            this.consecutiveIdleActions = 0; // Reset counter if not idling
+            this.consecutiveIdleActions = 0; // إعادة تعيين العداد إذا لم يكن خاملاً
         }
 
-        // 5. Execute the chosen action in the Minecraft environment
+        // 5. تنفيذ الإجراء المختار في بيئة Minecraft
         const { success, actionReward: immediateActionReward } = await this._executeBotAction(actionId);
 
-        // Update `lastState` and `lastAction` for the next thinking cycle
+        // تحديث `lastState` و `lastAction` لدورة التفكير التالية
         this.lastState = currentState;
         this.lastAction = actionId;
 
-        // Check for episode termination conditions (e.g., bot dies)
+        // التحقق من شروط إنهاء الحلقة (مثل موت البوت)
         if (this.bot.health <= 0) {
-            console.log(`[BOT-${this.username}][GAME_OVER] Bot died! Episode terminated.`);
-            done = true; // Mark episode as done
-            // Give a significant negative reward for death and train on it immediately
+            console.log(`[BOT-${this.username}][GAME_OVER] البوت مات! انتهت الحلقة.`);
+            done = true; // وضع علامة على انتهاء الحلقة
+            // إعطاء مكافأة سلبية كبيرة للموت والتدريب عليها فورًا
             this.qAgent.remember(this.lastState, this.lastAction, -100, currentState, true);
-            await this.qAgent.trainModel(); // Perform final training on death experience
+            await this.qAgent.trainModel(); // إجراء التدريب النهائي على تجربة الموت
 
-            console.log(`[BOT-${this.username}][EPISODE_SUMMARY] Episode ended. Final reward: ${this.currentEpisodeReward.toFixed(2)}`);
-            this.currentEpisodeReward = 0; // Reset episode reward for the next run
-            this.lastDiedTime = Date.now(); // Record death timestamp for 'recentlyDied' state
+            console.log(`[BOT-${this.username}][EPISODE_SUMMARY] انتهت الحلقة. المكافأة النهائية: ${this.currentEpisodeReward.toFixed(2)}`);
+            this.currentEpisodeReward = 0; // إعادة تعيين مكافأة الحلقة للتشغيل التالي
+            this.lastDiedTime = Date.now(); // تسجيل طابع زمني للموت لميزة "recentlyDied" في الحالة
 
-            await this.qAgent.saveModel(); // Save the learned model weights
+            await this.qAgent.saveModel(); // حفظ أوزان النموذج المتعلمة
 
-            // Disconnect the bot gracefully after death/episode end.
-            // The BotManager will handle restarting if needed.
+            // قطع اتصال البوت بأمان بعد الموت/انتهاء الحلقة.
+            // سيتعامل BotManager مع إعادة التشغيل إذا لزم الأمر.
             this.disconnect();
         }
     }
 }
 
 // =============================================================================
-// XI. BOT MANAGER CLASS
+// VII. فئة مدير البوتات (BotManager Class)
 // =============================================================================
 /**
- * Manages multiple BotAgent instances, handling their creation, connection,
- * disconnection, and persistence (saving/loading bot profiles and models).
+ * يدير مثيلات متعددة من BotAgent، ويتعامل مع إنشائها، توصيلها، قطع اتصالها،
+ * واستمراريتها (حفظ/تحميل ملفات تعريف البوتات ونماذجها).
  */
 class BotManager {
     constructor() {
-        this.bots = []; // Array to hold BotAgent instances
+        this.bots = []; // مصفوفة لحفظ مثيلات BotAgent
     }
 
     /**
-     * Loads existing bot configurations (usernames) from a JSON file.
-     * This allows the manager to reconnect the same bots on restart.
-     * @returns {Promise<Array<object>>} An array of bot configuration objects (e.g., [{ username: "Bot1" }]).
+     * يحمل تكوينات البوتات الموجودة (أسماء المستخدمين) من ملف JSON.
+     * يتيح ذلك للمدير إعادة توصيل نفس البوتات عند إعادة التشغيل.
+     * @returns {Promise<Array<object>>} مصفوفة من كائنات تكوين البوت (مثال: [{ username: "Bot1" }]).
      * @private
      */
     async _loadBotConfigs() {
         try {
-            // Ensure the models directory exists before attempting to read configs
+            // التأكد من وجود دليل النماذج قبل محاولة قراءة التكوينات
             await fs.mkdir(MODELS_DIR, { recursive: true });
             const data = await fs.readFile(BOTS_CONFIG_FILE, 'utf8');
             return JSON.parse(data);
         } catch (error) {
-            // If the file doesn't exist, it's a normal scenario for the first run
+            // إذا لم يكن الملف موجودًا، فهذا سيناريو طبيعي للتشغيل الأول
             if (error.code === 'ENOENT') {
-                console.log('[MANAGER] No existing bot configurations file found. Starting fresh.');
-                return []; // Return empty array if file not found
+                console.log('[MANAGER][INFO] لم يتم العثور على ملف تكوينات بوتات موجود. بدء جديد.');
+                return []; // إرجاع مصفوفة فارغة إذا لم يتم العثور على الملف
             }
-            console.error('[MANAGER] Error loading bot configurations:', error);
-            return []; // Return empty array on other errors too
+            console.error('[MANAGER][ERROR] خطأ أثناء تحميل تكوينات البوتات:', error);
+            return []; // إرجاع مصفوفة فارغة في حالة الأخطاء الأخرى أيضًا
         }
     }
 
     /**
-     * Saves the current list of active bot configurations to a JSON file.
-     * This is crucial for persistence across script restarts.
-     * @param {Array<object>} configs - An array of bot configuration objects to save.
+     * يحفظ القائمة الحالية لتكوينات البوتات النشطة في ملف JSON.
+     * هذا أمر حاسم للاستمرارية عبر عمليات إعادة تشغيل السكريبت.
+     * @param {Array<object>} configs - مصفوفة من كائنات تكوين البوت المراد حفظها.
      * @private
      */
     async _saveBotConfigs(configs) {
         try {
-            // Ensure the models directory exists before saving configs
+            // التأكد من وجود دليل النماذج قبل حفظ التكوينات
             await fs.mkdir(MODELS_DIR, { recursive: true });
             await fs.writeFile(BOTS_CONFIG_FILE, JSON.stringify(configs, null, 2), 'utf8');
-            console.log('[MANAGER] Bot configurations saved successfully.');
+            console.log('[MANAGER][INFO] تم حفظ تكوينات البوتات بنجاح.');
         } catch (error) {
-            console.error('[MANAGER] Error saving bot configurations:', error);
+            console.error('[MANAGER][ERROR] خطأ أثناء حفظ تكوينات البوتات:', error);
         }
     }
 
     /**
-     * Initializes and connects bots based on a specified count. It prioritizes
-     * reconnecting previously active bots from saved configurations.
-     * @param {number} desiredBotCount - The total number of bots to ensure are running.
+     * يهيئ ويوصل البوتات بناءً على عدد محدد. يعطي الأولوية لإعادة توصيل
+     * البوتات النشطة سابقًا من التكوينات المحفوظة.
+     * @param {number} desiredBotCount - العدد الإجمالي للبوتات المراد تشغيلها.
      */
     async initializeBots(desiredBotCount) {
         const loadedConfigs = await this._loadBotConfigs();
         const existingUsernames = new Set(loadedConfigs.map(c => c.username));
-        let activeBotConfigs = []; // To store configurations of bots that will be active in this session
+        let activeBotConfigs = []; // لتخزين تكوينات البوتات التي ستكون نشطة في هذه الجلسة
 
-        // 1. Reconnect existing bots from loaded configurations, up to desired count
+        // 1. إعادة توصيل البوتات الموجودة من التكوينات المحملة، حتى الوصول إلى العدد المطلوب
         for (const config of loadedConfigs) {
             if (this.bots.length < desiredBotCount) {
-                console.log(`[MANAGER] Reconnecting existing bot: ${config.username}`);
+                console.log(`[MANAGER][INFO] إعادة توصيل بوت موجود: ${config.username}`);
                 const botAgent = new BotAgent(config.username);
                 this.bots.push(botAgent);
                 botAgent.connect();
-                activeBotConfigs.push(config); // Keep this config for the new save
+                activeBotConfigs.push(config); // الاحتفاظ بهذا التكوين للحفظ الجديد
             } else {
-                console.log(`[MANAGER] Discarding saved bot ${config.username} as desired count is met.`);
-                // If the desired count is lower than loaded, disconnect the excess bots immediately
-                const tempBot = new BotAgent(config.username); // Create a temporary agent to save its model
-                await tempBot.qAgent.saveModel(); // Save its model even if not connecting
+                console.log(`[MANAGER][INFO] تجاهل البوت المحفوظ ${config.username} حيث تم الوصول إلى العدد المطلوب.`);
+                // إذا كان العدد المطلوب أقل من العدد المحمل، قم بقطع اتصال البوتات الزائدة على الفور
+                const tempBot = new BotAgent(config.username); // إنشاء وكيل مؤقت لحفظ نموذجه
+                await tempBot.qAgent.saveModel(); // حفظ نموذجه حتى لو لم يكن يتصل
             }
         }
 
-        // 2. Create new bots if the desired count is not yet met
+        // 2. إنشاء بوتات جديدة إذا لم يتم الوصول إلى العدد المطلوب بعد
         while (this.bots.length < desiredBotCount) {
             let newUsername = `RL_Agent_${Math.floor(Math.random() * 100000)}`;
-            // Ensure the new username is unique
+            // التأكد من أن اسم المستخدم الجديد فريد
             while (existingUsernames.has(newUsername)) {
                 newUsername = `RL_Agent_${Math.floor(Math.random() * 100000)}`;
             }
-            existingUsernames.add(newUsername); // Add to set to prevent duplicates in this session
+            existingUsernames.add(newUsername); // إضافته إلى المجموعة لمنع التكرار في هذه الجلسة
 
-            console.log(`[MANAGER] Creating new bot: ${newUsername}`);
+            console.log(`[MANAGER][INFO] إنشاء بوت جديد: ${newUsername}`);
             const botAgent = new BotAgent(newUsername);
             this.bots.push(botAgent);
             botAgent.connect();
-            activeBotConfigs.push({ username: newUsername }); // Add new bot's config
+            activeBotConfigs.push({ username: newUsername }); // إضافة تكوين البوت الجديد
         }
 
-        // 3. Save the *current* set of active bot configurations.
-        // This updates `bots_config.json` with the actual bots running in this session.
+        // 3. حفظ المجموعة *الحالية* من تكوينات البوتات النشطة.
+        // هذا يقوم بتحديث `bots_config.json` بالبوتات الفعلية التي تعمل في هذه الجلسة.
         await this._saveBotConfigs(activeBotConfigs);
 
-        // Optional: Set up a periodic save for bot configurations (e.g., every 5 minutes)
-        // This is a failsafe in case the script crashes before a clean shutdown.
+        // اختياري: إعداد حفظ دوري لتكوينات البوتات (مثال: كل 5 دقائق)
+        // هذا بمثابة حماية في حال تعطل السكريبت قبل إغلاقه بشكل نظيف.
         // setInterval(() => this._saveBotConfigs(this.bots.map(b => ({ username: b.username }))), 5 * 60 * 1000);
     }
 
     /**
-     * Disconnects all managed bots and ensures their models are saved.
-     * This function is typically called on graceful shutdown.
+     * يفصل جميع البوتات التي يتم إدارتها ويضمن حفظ نماذجها.
+     * يتم استدعاء هذه الدالة عادة عند الإغلاق الآمن للسكريبت.
      */
     async disconnectAllBots() {
-        console.log('[MANAGER] Disconnecting all bots and saving models...');
+        console.log('[MANAGER][INFO] قطع اتصال جميع البوتات وحفظ النماذج...');
         const currentActiveConfigs = [];
         for (const botAgent of this.bots) {
-            // Disconnect bot if it's still connected
+            // قطع اتصال البوت إذا كان لا يزال متصلاً
             botAgent.disconnect();
-            // Ensure the model is saved
+            // التأكد من حفظ النموذج
             await botAgent.qAgent.saveModel();
             currentActiveConfigs.push({ username: botAgent.username });
         }
-        // Save the final list of active bots to persist for the next run
+        // حفظ القائمة النهائية للبوتات النشطة للاستمرارية في التشغيل التالي
         await this._saveBotConfigs(currentActiveConfigs);
-        console.log('[MANAGER] All bots disconnected and models saved.');
+        console.log('[MANAGER][INFO] تم قطع اتصال جميع البوتات وحفظ النماذج.');
     }
 }
 
 
 // =============================================================================
-// XII. MAIN EXECUTION LOGIC
+// VIII. منطق التنفيذ الرئيسي (Main Execution Logic)
 // =============================================================================
 /**
- * The main entry point of the script. Handles user input for the number of bots
- * and manages their lifecycle.
+ * نقطة الدخول الرئيسية للسكريبت. تدير عدد البوتات ودورة حياتها.
+ * لم تعد بحاجة لإدخال المستخدم، حيث يتم تحديد عدد البوتات افتراضيًا في الكود.
  */
 async function main() {
-    // No longer need readline as desiredBotCount is set directly
-    // const rl = readline.createInterface({
-    //     input: process.stdin,
-    //     output: process.stdout
-    // });
-
-    // Set desiredBotCount directly from the constant
+    // تحديد عدد البوتات المطلوب مباشرة من الثابت DEFAULT_BOT_COUNT
     const desiredBotCount = DEFAULT_BOT_COUNT;
-    console.log(`[MANAGER] Starting with ${desiredBotCount} bots (default setting).`);
+    console.log(`[MANAGER][INFO] بدء تشغيل ${desiredBotCount} بوت (الإعداد الافتراضي).`);
 
     const botManager = new BotManager();
     await botManager.initializeBots(desiredBotCount);
 
-    // --- Graceful Shutdown Handling ---
-    // Listen for process termination signals (Ctrl+C, `kill` command)
-    process.on('SIGINT', async () => { // Handles Ctrl+C
-        console.log('\n[PROCESS] Detected SIGINT. Shutting down bots and saving models...');
+    // --- معالجة الإغلاق الآمن (Graceful Shutdown Handling) ---
+    // الاستماع لإشارات إنهاء العملية (Ctrl+C، أمر `kill`)
+    process.on('SIGINT', async () => { // يتعامل مع Ctrl+C
+        console.log('\n[PROCESS][INFO] تم اكتشاف SIGINT. إيقاف البوتات وحفظ النماذج...');
         await botManager.disconnectAllBots();
-        process.exit(0); // Exit gracefully
+        process.exit(0); // الخروج بأمان
     });
-    process.on('SIGTERM', async () => { // Handles `kill` command
-        console.log('\n[PROCESS] Detected SIGTERM. Shutting down bots and saving models...');
+    process.on('SIGTERM', async () => { // يتعامل مع أمر `kill`
+        console.log('\n[PROCESS][INFO] تم اكتشاف SIGTERM. إيقاف البوتات وحفظ النماذج...');
         await botManager.disconnectAllBots();
-        process.exit(0); // Exit gracefully
+        process.exit(0); // الخروج بأمان
     });
 
-    // You might want to add more robust error handling for unexpected crashes
-    // For example, a try-catch around the main loop or PM2 for process management
+    // يمكنك إضافة معالجة أخطاء أكثر قوة للتعطلات غير المتوقعة هنا.
+    // على سبيل المثال، استخدام try-catch حول الحلقة الرئيسية أو أداة PM2 لإدارة العمليات.
 }
 
-// Start the main execution function
+// بدء دالة التنفيذ الرئيسية
 main();
