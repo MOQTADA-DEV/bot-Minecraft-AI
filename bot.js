@@ -1,47 +1,37 @@
 const mineflayer = require('mineflayer');
-const util = require('minecraft-server-util');
 
 const serverAddress = 'MQTADA12.aternos.me';
 const serverPort = 55865;
 
 const maxBots = 20;
-const botLifetime = 100 * 60 * 1000; // 100 دقيقة
-const baseInterval = 300; // 5 دقائق
-const maxInterval = 360; // 6 دقائق
+const botLifetime = 100 * 60 * 1000; // 100 دقيقة (100 x 60 x 1000 ملّي)
+const baseInterval = 300; // 5 دقائق بالثواني
+const maxInterval = 360; // 6 دقائق بالثواني
 
-let serverVersion = 'auto';       // سيُحَدَّد تلقائيًا لاحقًا
+// ثبّتنا الإصدار يدويًّا ليتوافق مع سيرفرك Java Vanilla 1.20
+const serverVersion = '1.20';
+
 let activeBots = new Array(maxBots).fill(null);
 let scheduleDelays = new Array(maxBots).fill(0);
 
-// استعلام عن إصدار السرفر وتخزينه
-async function detectServerVersion() {
-  try {
-    const status = await util.status(serverAddress, { port: serverPort });
-    console.log(`🛰️ تم اكتشاف إصدار السرفر: ${status.version.name}`);
-    serverVersion = status.version.name;
-  } catch (err) {
-    console.warn('⚠️ فشل اكتشاف إصدار السرفر، سيتم استخدام الإصدار الأحدث تلقائيًا.');
-    serverVersion = 'auto';
-  }
-}
-
 function getIntervalForBot(botNumber) {
-  let interval = baseInterval + (botNumber % (maxInterval - baseInterval + 1));
-  interval += scheduleDelays[botNumber];
-  return interval * 1000;
+  // نأخذ الفارق ضمن النطاق base–max ثم نضيف التأخيرات المتراكمة
+  let intervalSec = baseInterval + (botNumber % (maxInterval - baseInterval + 1));
+  intervalSec += scheduleDelays[botNumber];
+  return intervalSec * 1000; // نحول للميلي ثانية
 }
 
 function delayAllSchedulesOneMinute() {
   for (let i = 0; i < maxBots; i++) {
-    scheduleDelays[i] += 1;
+    scheduleDelays[i] += 60; // أضف 60 ثانية (دقيقة) لكل جدول
   }
-  console.log("⏳ تأخير الجداول دقيقة بسبب فشل الاتصال.");
+  console.log("⏳ تم تأخير جميع الجداول دقيقة بسبب فشل الاتصال.");
 }
 
 function generateRandomName() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let name = 'Bot_';
-  for (let i = 0; i < 8; i++) {  // أطول قليلًا لضمان التفرد
+  for (let i = 0; i < 8; i++) {
     name += chars[Math.floor(Math.random() * chars.length)];
   }
   return name;
@@ -62,7 +52,7 @@ function createBot(botIndex) {
 
     setTimeout(() => {
       bot.quit();
-      console.log(`⏱️ ${bot.username} خرج بعد 100 دقيقة.`);
+      console.log(`⏱️ ${bot.username} خرج بعد ${botLifetime / 60000} دقيقة.`);
       activeBots[botIndex] = null;
       scheduleNextBot(botIndex);
     }, botLifetime);
@@ -71,7 +61,7 @@ function createBot(botIndex) {
   bot.on('error', (err) => {
     console.error(`❌ خطأ في ${bot.username}:`, err.code || err.message);
 
-    // في حال أخطاء الاتصال، نؤجل جميع الجداول دقيقة واحدة
+    // إذا كان خطأ اتصال، نؤجل جميع الجداول دقيقة ثم نعيد جدولة هذا البوت
     if (
       err.code === 'ECONNREFUSED' ||
       err.code === 'ECONNRESET' ||
@@ -90,18 +80,18 @@ function createBot(botIndex) {
 }
 
 function scheduleNextBot(botIndex) {
-  const interval = getIntervalForBot(botIndex);
-  console.log(`📆 جدولة بوت ${botIndex} للدخول بعد ${Math.floor(interval / 1000)} ثانية.`);
+  const delayMs = getIntervalForBot(botIndex);
+  console.log(`📆 جدولة بوت #${botIndex} للدخول بعد ${Math.floor(delayMs / 1000)} ثانية.`);
   setTimeout(() => {
     if (!activeBots[botIndex]) {
       createBot(botIndex);
     }
-  }, interval);
+  }, delayMs);
 }
 
-// البداية: اكتشاف الإصدار ثم جدولة البوتات
-(async () => {
-  await detectServerVersion();
+// بدء العملية: جدولة كل البوتات فورًا
+(() => {
+  console.log(`🛰️ تشغيل البوتات على إصدار Java Vanilla ${serverVersion}.`);
   for (let i = 0; i < maxBots; i++) {
     scheduleNextBot(i);
   }
