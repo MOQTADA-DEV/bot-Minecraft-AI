@@ -6,10 +6,10 @@
     "start": "node bot.js"
   },
   "dependencies": {
-    "mineflayer": "^4.0.0",
-    "mineflayer-pathfinder": "^1.0.0",
-    "@tensorflow/tfjs-node": "^4.0.0",
-    "vec3": "^1.0.0",
-    "minecraft-data": "^2.0.0"
+    "mineflayer": "^4.11.1",
+    "mineflayer-pathfinder": "^2.3.2",
+    "@tensorflow/tfjs-node": "^4.16.0",
+    "vec3": "^0.1.7",
+    "minecraft-data": "^3.4.0"
   }
 }
